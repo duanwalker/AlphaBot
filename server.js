@@ -7,6 +7,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import searchRoutes from "./routes/search.js";
+import axios from "axios";
+
 
 dotenv.config();
 
@@ -274,6 +276,43 @@ app.get("/api/oanda/price/:pair", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // Alpha Vantage (Market Data)
 // ─────────────────────────────────────────────────────────────
+
+// Alpha Vantage Fundamentals Client
+async function getFundamentals(symbol) {
+  const key = process.env.ALPHA_VANTAGE_API_KEY;
+  const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${key}`;
+  const response = await axios.get(url);
+  return response.data;
+}
+
+app.get("/api/fundamentals/:symbol", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await getFundamentals(symbol);
+
+    if (!data || Object.keys(data).length === 0) {
+      return res.status(404).json({ error: "No fundamentals found" });
+    }
+
+    res.json({
+      symbol,
+      name: data.Name,
+      description: data.Description,
+      marketCap: data.MarketCapitalization,
+      peRatio: data.PERatio,
+      eps: data.EPS,
+      dividendYield: data.DividendYield,
+      profitMargin: data.ProfitMargin,
+      analystTargetPrice: data.AnalystTargetPrice,
+      week52High: data["52WeekHigh"],
+      week52Low: data["52WeekLow"],
+      beta: data.Beta
+    });
+  } catch (e) {
+    console.error("Fundamentals error:", e.message);
+    res.status(500).json({ error: "Failed to fetch fundamentals" });
+  }
+});
 
 app.get("/api/market/quote/:symbol", async (req, res) => {
   try {

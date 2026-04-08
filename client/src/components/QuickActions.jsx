@@ -4,6 +4,23 @@ import useSymbolSearch from "../hooks/useSymbolSearch";
 export default function QuickActions() {
   const [input, setInput] = useState("");
   const { loading, error, result, searchSymbol } = useSymbolSearch();
+  const [fundamentals, setFundamentals] = useState(null);
+
+  // ───────────────────────────────────────────────
+  // FETCH FUNDAMENTALS
+  // ───────────────────────────────────────────────
+  const fetchFundamentals = async () => {
+    const symbol = input.trim();
+    if (!symbol) return;
+
+    try {
+      const r = await fetch(`/api/fundamentals/${symbol}`);
+      const data = await r.json();
+      setFundamentals(data);
+    } catch (err) {
+      console.error("Fundamentals error:", err);
+    }
+  };
 
   const handleSearch = () => {
     const trimmed = input.trim();
@@ -11,61 +28,105 @@ export default function QuickActions() {
   };
 
   return (
-    <div className="card quick-actions-card">
-      <h3>Quick Actions</h3>
+    <>
+      {/* ─────────────────────────────────────────────── */}
+      {/* QUICK ACTIONS CARD */}
+      {/* ─────────────────────────────────────────────── */}
+      <div className="card quick-actions-card">
+        <h3>Quick Actions</h3>
 
-      {/* Search Bar */}
-      <div className="quick-actions-search">
-        <input
-          type="text"
-          placeholder="Search symbol…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="quick-actions-input"
-        />
-        <button className="btn icon-btn" onClick={handleSearch}>
-          Search
-        </button>
+        {/* Search Bar */}
+        <div className="quick-actions-search">
+          <input
+            type="text"
+            placeholder="Search symbol…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            className="quick-actions-input"
+          />
+          <button className="btn icon-btn" onClick={handleSearch}>
+            Search
+          </button>
+        </div>
+
+        {/* Quick View */}
+        <div className="quick-view">
+          {loading && <p>Searching…</p>}
+          {error && <p className="error">{error}</p>}
+
+          {result && (
+            <div className="quick-view-box">
+              <div className="qv-row">
+                <span className="qv-symbol">{result.symbol}</span>
+                {result.name && <span className="qv-name">{result.name}</span>}
+              </div>
+
+              <div className="qv-row">
+                <span>Bid:</span>
+                <span>
+                  {result.bid != null ? `$${result.bid.toFixed(2)}` : "—"}
+                </span>
+              </div>
+
+              <div className="qv-row">
+                <span>Ask:</span>
+                <span>
+                  {result.ask != null ? `$${result.ask.toFixed(2)}` : "—"}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="quick-actions-buttons">
+          <button className="btn buy-btn">Buy</button>
+          <button className="btn sell-btn">Sell</button>
+          <button className="btn close-position-btn">Close Position</button>
+
+          {/* FIXED: use fetchFundamentals() with no symbol param */}
+          <button className="btn qa-button" onClick={fetchFundamentals}>
+            Fundamentals
+          </button>
+
+          <button className="btn" onClick={handleSearch}>
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Quick View */}
-      <div className="quick-view">
-        {loading && <p>Searching…</p>}
-        {error && <p className="error">{error}</p>}
+      {/* ─────────────────────────────────────────────── */}
+      {/* FUNDAMENTALS CARD (SEPARATE CARD BELOW) */}
+      {/* ─────────────────────────────────────────────── */}
+      {fundamentals && <FundamentalsCard data={fundamentals} />}
+    </>
+  );
+}
 
-        {result && (
-          <div className="quick-view-box">
-            <div className="qv-row">
-              <span className="qv-symbol">{result.symbol}</span>
-              {result.name && <span className="qv-name">{result.name}</span>}
-            </div>
+// ───────────────────────────────────────────────
+// FUNDAMENTALS CARD COMPONENT
+// Paste this BELOW the main component
+// ───────────────────────────────────────────────
+function FundamentalsCard({ data }) {
+  return (
+    <div className="card fundamentals-card">
+      <h3>
+        {data.symbol} — {data.name}
+      </h3>
 
-            <div className="qv-row">
-              <span>Bid:</span>
-              <span>
-                {result.bid != null ? `$${result.bid.toFixed(2)}` : "—"}
-              </span>
-            </div>
-
-            <div className="qv-row">
-              <span>Ask:</span>
-              <span>
-                {result.ask != null ? `$${result.ask.toFixed(2)}` : "—"}
-              </span>
-            </div>
-          </div>
-        )}
+      <div className="fundamentals-grid">
+        <div><strong>Market Cap:</strong> {Number(data.marketCap).toLocaleString()}</div>
+        <div><strong>P/E Ratio:</strong> {data.peRatio}</div>
+        <div><strong>EPS:</strong> {data.eps}</div>
+        <div><strong>Dividend Yield:</strong> {data.dividendYield}</div>
+        <div><strong>Profit Margin:</strong> {data.profitMargin}</div>
+        <div><strong>Analyst Target:</strong> {data.analystTargetPrice}</div>
+        <div><strong>52W High:</strong> {data.week52High}</div>
+        <div><strong>52W Low:</strong> {data.week52Low}</div>
+        <div><strong>Beta:</strong> {data.beta}</div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="quick-actions-buttons">
-        <button className="btn buy-btn">Buy</button>
-        <button className="btn sell-btn">Sell</button>
-        <button className="btn close-position-btn">Close Position</button>
-        <button className="btn" onClick={handleSearch}>
-          Refresh
-        </button>
-      </div>
+      <p className="description">{data.description}</p>
     </div>
   );
 }
