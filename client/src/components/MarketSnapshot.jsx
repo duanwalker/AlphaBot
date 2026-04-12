@@ -10,7 +10,7 @@ export default function MarketSnapshot({ onSnapshot, loading, error }) {
       setLocalLoading(true);
       setLocalError(null);
 
-      const symbols = ["AMZN", "AAPL", "MSFT", "GOOGL", "TSLA", "META", "NVDA", "JPM", "V", "DIS", "NFLX", "PYPL", "INTC", "CSCO","BA","BTCUSD","SPY"];
+      const symbols = ["DJI","NAS","IXIC","BTCUSD","SPY"];
       const results = [];
 
       for (const sym of symbols) {

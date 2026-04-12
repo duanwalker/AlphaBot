@@ -8,6 +8,7 @@ export default function AssistantPanel({
   positions,
   orders,
   marketSnapshot,
+  symbol
 }) {
   const [messages, setMessages] = useState([
     { from: "assistant", text: "Hi Duan — what would you like to explore?" },
@@ -23,35 +24,36 @@ export default function AssistantPanel({
   if (!open) return null;
 
   async function sendMessage() {
-    if (!input.trim()) return;
+  if (!input.trim()) return;
 
-    const userMsg = { from: "user", text: input };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
+  const userMsg = { from: "user", text: input };
+  setMessages((prev) => [...prev, userMsg]);
+  setInput("");
+  setLoading(true);
 
-    try {
-      const res = await axios.post("http://localhost:3001/api/assistant", {
-        message: userMsg.text,
-        context: {
-          account,
-          positions,
-          orders,
-          marketSnapshot,
-        },
-      });
+  try {
+    const res = await axios.post("http://localhost:3001/api/assistant", {
+      message: userMsg.text,
+      context: {
+        account,
+        positions,
+        orders,
+        marketSnapshot,
+        symbol: symbol || null
+      },
+    });
 
-      const assistantMsg = { from: "assistant", text: res.data.reply };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { from: "assistant", text: "Sorry — I hit an error processing that." },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    const assistantMsg = { from: "assistant", text: res.data.reply };
+    setMessages((prev) => [...prev, assistantMsg]);
+  } catch (err) {
+    setMessages((prev) => [
+      ...prev,
+      { from: "assistant", text: "Sorry — I hit an error processing that." },
+    ]);
+  } finally {
+    setLoading(false);
   }
+}
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -59,6 +61,14 @@ export default function AssistantPanel({
       sendMessage();
     }
   }
+
+  // ───────────────────────────────────────────────
+  // RESET CHAT / NEW CONVERSATION
+  // ───────────────────────────────────────────────
+  const handleReset = () => {
+    setMessages([]);      // clears the entire chat history
+    setInput("");         // clears the input box
+  };
 
   return (
     <div className="assistant-overlay">
@@ -90,6 +100,9 @@ export default function AssistantPanel({
           />
           <button className="btn send-btn" onClick={sendMessage} disabled={loading}>
             {loading ? "Thinking..." : "Send"}
+          </button>
+          <button className="btn reset-btn" onClick={handleReset}>
+            Reset
           </button>
         </div>
       </div>

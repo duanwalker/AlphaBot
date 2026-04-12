@@ -38,47 +38,84 @@ const anthropic = new Anthropic({
 app.post("/api/assistant", async (req, res) => {
   try {
     const { message, context } = req.body;
+    console.log("\n=== /api/assistant context ===");
+    console.log(JSON.stringify(context, null, 2));
+
+   // Optional fundamentals injection (direct Alpha Vantage call)
+let fundamentals = null;
+
+if (context?.symbol) {
+  try {
+    const symbol = context.symbol.toUpperCase();
+    const raw = await getFundamentals(symbol);
+
+    if (raw && Object.keys(raw).length > 0) {
+      fundamentals = {
+        symbol,
+        name: raw.Name,
+        description: raw.Description,
+        marketCap: raw.MarketCapitalization,
+        peRatio: raw.PERatio,
+        eps: raw.EPS,
+        dividendYield: raw.DividendYield,
+        profitMargin: raw.ProfitMargin,
+        analystTargetPrice: raw.AnalystTargetPrice,
+        week52High: raw["52WeekHigh"],
+        week52Low: raw["52WeekLow"],
+        beta: raw.Beta,
+      };
+    } else {
+      console.error("Assistant fundamentals: empty response for", symbol);
+    }
+  } catch (err) {
+    console.error("Assistant fundamentals error:", err);
+  }
+}
+
 
     const systemPrompt = `
-You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
-Your purpose is to turn the provided portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
-Operating assumptions:
-- Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
-- Use ONLY the information provided in the conversation/dashboard inputs. If critical data is missing, do not fabricate it—state what’s missing and proceed using explicit assumptions or request the missing inputs.
-- Be decisive when data is sufficient; be transparent when it is not.
-Core tasks:
-1) Explain market concepts, mechanics, and strategies (stocks + options).
-2) Analyze current positions, open orders, watchlist names, and market data supplied by the user.
-3) Propose trade candidates that fit the portfolio constraints and the user’s stated goals.
-4) Provide a clear rationale, risk analysis, and explicit invalidation criteria for each idea.
-When you make recommendations:
-- Provide your reasoning in a compact, checkable way.
-- Include at least one alternative path.
-- Tie every suggestion to available buying power, position sizing, and risk controls.
-Output requirements:
-A) Snapshot
-B) Primary idea
-C) Secondary ideas
-D) Questions needed
-`;
+    You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
+    Your purpose is to turn the provided portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
+    Operating assumptions:
+    - Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
+    - Use ONLY the information provided in the conversation/dashboard inputs. If critical data is missing, do not fabricate it—state what’s missing and proceed using explicit assumptions or request the missing inputs.
+    - Be decisive when data is sufficient; be transparent when it is not.
+    Core tasks:
+    1) Explain market concepts, mechanics, and strategies (stocks + options).
+    2) Analyze current positions, open orders, watchlist names, and market data supplied by the user.
+    3) Propose trade candidates that fit the portfolio constraints and the user’s stated goals.
+    4) Provide a clear rationale, risk analysis, and explicit invalidation criteria for each idea.
+    When you make recommendations:
+    - Provide your reasoning in a compact, checkable way.
+    - Include at least one alternative path.
+    - Tie every suggestion to available buying power, position sizing, and risk controls.
+    Output requirements:
+    A) Snapshot
+    B) Primary idea
+    C) Secondary ideas
+    D) Questions needed
+    `;
 
     const userContext = `
-Account:
-${JSON.stringify(context.account, null, 2)}
+    Account:
+    ${JSON.stringify(context.account, null, 2)}
 
-Positions:
-${JSON.stringify(context.positions, null, 2)}
+    Positions:
+    ${JSON.stringify(context.positions, null, 2)}
 
-Orders:
-${JSON.stringify(context.orders, null, 2)}
+    Orders:
+    ${JSON.stringify(context.orders, null, 2)}
 
-Market Snapshot:
-${JSON.stringify(context.marketSnapshot, null, 2)}
-`;
+    Market Snapshot:
+    ${JSON.stringify(context.marketSnapshot, null, 2)}
+
+    Fundamentals:
+    ${fundamentals ? JSON.stringify(fundamentals, null, 2) : "None"}
+    `;
 
     const completion = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 800,
+      max_tokens: 1500,
       temperature: 0.3,
       system: systemPrompt,
       messages: [

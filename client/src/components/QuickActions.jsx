@@ -1,10 +1,18 @@
 import { useState } from "react";
 import useSymbolSearch from "../hooks/useSymbolSearch";
+import { useEffect } from "react";
 
-export default function QuickActions() {
+
+export default function QuickActions({ onSymbolSelected }) {
   const [input, setInput] = useState("");
   const { loading, error, result, searchSymbol } = useSymbolSearch();
   const [fundamentals, setFundamentals] = useState(null);
+
+   useEffect(() => {
+    if (result && onSymbolSelected) {
+      onSymbolSelected(result.symbol);
+    }
+  }, [result, onSymbolSelected]);
 
   // ───────────────────────────────────────────────
   // FETCH FUNDAMENTALS

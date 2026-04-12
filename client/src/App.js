@@ -14,6 +14,7 @@ function App() {
 
   const [showAssistant, setShowAssistant] = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
+  const [activeSymbol, setActiveSymbol] = useState(null);
 
   return (
     <Router>
@@ -55,13 +56,15 @@ function App() {
               path="/"
               element={
                 <Dashboard
-                  account={account}
-                  positions={positions}
-                  orders={orders}
-                  error={error}
-                  marketSnapshot={marketSnapshot}
-                  setMarketSnapshot={setMarketSnapshot}
-                />
+                account={account}
+                positions={positions}
+                orders={orders}
+                error={error}
+                loading={loading}
+                marketSnapshot={marketSnapshot}
+                setMarketSnapshot={setMarketSnapshot}
+                setActiveSymbol={setActiveSymbol}
+              />
               }
             />
 
@@ -100,6 +103,7 @@ function App() {
           positions={positions}
           orders={orders}
           marketSnapshot={marketSnapshot}
+          symbol={activeSymbol}
         />
       </div>
     </Router>

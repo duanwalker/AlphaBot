@@ -12,7 +12,8 @@ export default function Dashboard({
   error,
   loading,
   marketSnapshot,
-  setMarketSnapshot
+  setMarketSnapshot,
+  setActiveSymbol
 }) {
   return (
     <>
@@ -37,7 +38,7 @@ export default function Dashboard({
           error={error}
         />
 
-        <QuickActions />
+        <QuickActions onSymbolSelected={setActiveSymbol} />
 
         <SentimentCard />
       </section>
