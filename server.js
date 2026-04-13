@@ -8,6 +8,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import searchRoutes from "./routes/search.js";
 import axios from "axios";
+import { normalizePriceData } from "./services/normalizePriceData.js";
 
 
 dotenv.config();
@@ -50,6 +51,7 @@ if (context?.symbol) {
     const raw = await getFundamentals(symbol);
 
     if (raw && Object.keys(raw).length > 0) {
+      await mergeNormalizedFundamentals(symbol, raw);
       fundamentals = {
         symbol,
         name: raw.Name,
@@ -62,6 +64,9 @@ if (context?.symbol) {
         analystTargetPrice: raw.AnalystTargetPrice,
         week52High: raw["52WeekHigh"],
         week52Low: raw["52WeekLow"],
+        normalized52WeekHigh: raw.normalized52WeekHigh,
+        normalized52WeekLow: raw.normalized52WeekLow,
+        normalized52WeekSource: raw.normalized52WeekSource,
         beta: raw.Beta,
       };
     } else {
@@ -322,6 +327,18 @@ async function getFundamentals(symbol) {
   return response.data;
 }
 
+async function mergeNormalizedFundamentals(symbol, fundamentals) {
+  const normalized = await normalizePriceData(symbol);
+  fundamentals.normalized52WeekHigh = normalized.normalized52WeekHigh;
+  fundamentals.normalized52WeekLow = normalized.normalized52WeekLow;
+  fundamentals.normalized52WeekSource = normalized.normalized52WeekSource;
+
+  fundamentals["52WeekHigh"] = normalized.normalized52WeekHigh;
+  fundamentals["52WeekLow"] = normalized.normalized52WeekLow;
+
+  return fundamentals;
+}
+
 app.get("/api/fundamentals/:symbol", async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -330,6 +347,8 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
     if (!data || Object.keys(data).length === 0) {
       return res.status(404).json({ error: "No fundamentals found" });
     }
+
+    await mergeNormalizedFundamentals(symbol, data);
 
     res.json({
       symbol,
@@ -343,6 +362,9 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
       analystTargetPrice: data.AnalystTargetPrice,
       week52High: data["52WeekHigh"],
       week52Low: data["52WeekLow"],
+      normalized52WeekHigh: data.normalized52WeekHigh,
+      normalized52WeekLow: data.normalized52WeekLow,
+      normalized52WeekSource: data.normalized52WeekSource,
       beta: data.Beta
     });
   } catch (e) {
