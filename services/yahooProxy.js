@@ -4,30 +4,37 @@ export async function fetchYahooProxyQuote(symbol) {
   const apiKey = process.env.YAHOO_PROXY_API_KEY;
 
   if (!apiKey) {
-    console.warn("YAHOO_PROXY_API_KEY not configured, will fall back to chart data");
+    console.warn("Missing YAHOO_PROXY_API_KEY");
     return null;
   }
 
-  const url = `https://yfapi.net/v6/finance/quote?symbols=${symbol}`;
+  const url = `https://yahoo-finance187.p.rapidapi.com/api/yahoofinance/v1/quote/summary?symbol=${symbol}`;
   const headers = {
-    "x-api-key": apiKey,
+    "X-RapidAPI-Key": apiKey,
+    "X-RapidAPI-Host": "yahoo-finance187.p.rapidapi.com",
     "User-Agent": "Mozilla/5.0",
     Accept: "application/json",
   };
 
   try {
     const response = await axios.get(url, { headers });
-    const quoteData = response.data?.quoteResponse?.result?.[0];
-
+    const quoteData = response.data;
+   
     if (!quoteData) {
       return null;
     }
 
+    const high = quoteData.fiftyTwoWeekHigh?.raw;
+    const low = quoteData.fiftyTwoWeekLow?.raw;
+    const price = quoteData.regularMarketPrice?.raw;
+    const prevClose = quoteData.regularMarketPreviousClose?.raw;
+
     return {
-      fiftyTwoWeekHigh: quoteData?.fiftyTwoWeekHigh,
-      fiftyTwoWeekLow: quoteData?.fiftyTwoWeekLow,
-      regularMarketPrice: quoteData?.regularMarketPrice,
-      regularMarketPreviousClose: quoteData?.regularMarketPreviousClose,
+      high,
+      low,
+      price,
+      prevClose,
+      source: "yahoo_proxy_quote_fields",
     };
   } catch (err) {
     console.error(`Yahoo Proxy API error for ${symbol}:`, err.message);

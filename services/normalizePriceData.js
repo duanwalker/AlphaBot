@@ -4,14 +4,10 @@ import { fetchYahooProxyQuote } from "./yahooProxy.js";
 export async function normalizePriceData(symbol) {
   const proxyQuote = await fetchYahooProxyQuote(symbol);
 
-  if (
-    proxyQuote &&
-    Number.isFinite(proxyQuote?.fiftyTwoWeekHigh) &&
-    Number.isFinite(proxyQuote?.fiftyTwoWeekLow)
-  ) {
+  if (proxyQuote) {
     return {
-      normalized52WeekHigh: proxyQuote.fiftyTwoWeekHigh,
-      normalized52WeekLow: proxyQuote.fiftyTwoWeekLow,
+      normalized52WeekHigh: proxyQuote.high,
+      normalized52WeekLow: proxyQuote.low,
       normalized52WeekSource: "yahoo_proxy_quote_fields",
     };
   }
