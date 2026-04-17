@@ -9,6 +9,8 @@ import dotenv from "dotenv";
 import searchRoutes from "./routes/search.js";
 import axios from "axios";
 import { normalizePriceData } from "./services/normalizePriceData.js";
+import { fetchYahooHistorical } from "./services/yahooHistorical.js";
+import { normalizeHistoricalData } from "./services/normalizeHistoricalData.js";
 
 
 dotenv.config();
@@ -370,6 +372,41 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
   } catch (e) {
     console.error("Fundamentals error:", e.message);
     res.status(500).json({ error: "Failed to fetch fundamentals" });
+  }
+});
+
+app.get("/api/history/:symbol", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const timeframe = String(req.query.timeframe || "1y").toLowerCase();
+
+    const raw = await fetchYahooHistorical(symbol, timeframe);
+    if (!raw || Array.isArray(raw) && raw.length === 0) {
+      return res.status(404).json({ error: `No historical data found for ${symbol}` });
+    }
+
+    const candles = normalizeHistoricalData(raw);
+    if (candles.length === 0) {
+      return res.status(404).json({ error: `No valid historical candles found for ${symbol}` });
+    }
+
+    res.json({
+      symbol,
+      timeframe,
+      candles,
+      source: "yahoo_historical",
+    });
+  } catch (e) {
+    if (e?.code === "YAHOO_PROXY_API_KEY_MISSING") {
+      return res.status(500).json({ error: "Missing YAHOO_PROXY_API_KEY for Yahoo historical data" });
+    }
+
+    if (e?.code === "UNSUPPORTED_TIMEFRAME") {
+      return res.status(400).json({ error: e.message });
+    }
+
+    console.error("Historical data error:", e.message);
+    res.status(500).json({ error: "Failed to fetch historical data" });
   }
 });
 

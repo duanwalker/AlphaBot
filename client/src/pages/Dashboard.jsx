@@ -4,6 +4,7 @@ import OrdersCard from "../components/OrdersCard";
 import MarketSnapshot from "../components/MarketSnapshot";
 import QuickActions from "../components/QuickActions";
 import SentimentCard from "../components/SentimentCard";
+import HistoricalSparklineCard from "../components/HistoricalSparklineCard";
 
 export default function Dashboard({
   account,
@@ -13,7 +14,8 @@ export default function Dashboard({
   loading,
   marketSnapshot,
   setMarketSnapshot,
-  setActiveSymbol
+  setActiveSymbol,
+  activeSymbol
 }) {
   return (
     <>
@@ -37,6 +39,8 @@ export default function Dashboard({
           loading={loading}
           error={error}
         />
+
+        <HistoricalSparklineCard symbol={activeSymbol || "AAPL"} />
 
         <QuickActions onSymbolSelected={setActiveSymbol} />
 

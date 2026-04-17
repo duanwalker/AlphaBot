@@ -64,6 +64,7 @@ function App() {
                 marketSnapshot={marketSnapshot}
                 setMarketSnapshot={setMarketSnapshot}
                 setActiveSymbol={setActiveSymbol}
+                activeSymbol={activeSymbol}
               />
               }
             />

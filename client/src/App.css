@@ -499,3 +499,63 @@ body::before {
   background: var(--accent);
   color: #fff;
 }
+
+/* ====== Historical data card ====== */
+
+/* example only */
+.historical-sparkline-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.historical-sparkline-card .symbol {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.historical-sparkline-card .price-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.historical-sparkline-card .price {
+  font-size: 1.1rem;
+}
+
+.historical-sparkline-card .pct-change.up {
+  color: #22c55e;
+}
+.historical-sparkline-card .pct-change.down {
+  color: #ef4444;
+}
+
+.timeframe-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.timeframe-btn {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+}
+
+.timeframe-btn.active {
+  background: #111827;
+  color: white;
+}
+
+.sparkline-timeframes {
+  margin-bottom: 8px;
+}
+
+.sparkline-chart-wrap {
+  margin-top: 8px;
+}
+
+.sparkline-chart-container {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
