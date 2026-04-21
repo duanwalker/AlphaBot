@@ -7,7 +7,15 @@
  */
 
 import { BrokerInterface } from "./BrokerInterface.js";
-import { buildCacheKey, deleteCacheKey, getOrSetCache } from "../services/cache.js";
+import {
+  ACCOUNT_TTL,
+  ORDERS_TTL,
+  POSITIONS_TTL,
+  QUOTE_TTL,
+  buildCacheKey,
+  deleteCacheKey,
+  getOrSetCache,
+} from "../services/cache.js";
 import { attachEntityScope, attachEntityScopeList } from "../services/entityMetadata.js";
 
 export class AlpacaAdapter extends BrokerInterface {
@@ -54,9 +62,9 @@ export class AlpacaAdapter extends BrokerInterface {
    * @returns {Promise<import("./BrokerInterface.js").AccountSummary>}
    */
   async getAccountSummary(userId, tenantId = "alpha-dev") {
-    const cacheKey = buildCacheKey("account", userId);
+    const cacheKey = buildCacheKey("account", [`user:${userId}`]);
 
-    const raw = await getOrSetCache(cacheKey, () =>
+    const raw = await getOrSetCache(cacheKey, ACCOUNT_TTL, () =>
       this._fetch("/v2/account", userId)
     );
 
@@ -89,9 +97,9 @@ export class AlpacaAdapter extends BrokerInterface {
    * @returns {Promise<import("./BrokerInterface.js").Position[]>}
    */
   async getPositions(userId, tenantId = "alpha-dev") {
-    const cacheKey = buildCacheKey("positions", userId);
+    const cacheKey = buildCacheKey("positions", [`user:${userId}`]);
 
-    const raw = await getOrSetCache(cacheKey, () =>
+    const raw = await getOrSetCache(cacheKey, POSITIONS_TTL, () =>
       this._fetch("/v2/positions", userId)
     );
 
@@ -121,9 +129,9 @@ export class AlpacaAdapter extends BrokerInterface {
    * @returns {Promise<import("./BrokerInterface.js").Order[]>}
    */
   async getOrders(userId, tenantId = "alpha-dev") {
-    const cacheKey = buildCacheKey("orders", userId);
+    const cacheKey = buildCacheKey("orders", [`user:${userId}`]);
 
-    const raw = await getOrSetCache(cacheKey, () =>
+    const raw = await getOrSetCache(cacheKey, ORDERS_TTL, () =>
       this._fetch("/v2/orders?status=all&limit=50", userId)
     );
 
@@ -158,8 +166,9 @@ export class AlpacaAdapter extends BrokerInterface {
     });
 
     // Invalidate stale caches
-    deleteCacheKey(buildCacheKey("orders", userId));
-    deleteCacheKey(buildCacheKey("positions", userId));
+    deleteCacheKey(buildCacheKey("orders", [`user:${userId}`]));
+    deleteCacheKey(buildCacheKey("positions", [`user:${userId}`]));
+    deleteCacheKey(buildCacheKey("account", [`user:${userId}`]));
 
     return attachEntityScope(data, userId, tenantId);
   }
@@ -175,7 +184,9 @@ export class AlpacaAdapter extends BrokerInterface {
   async cancelOrder(orderId, userId, tenantId = "alpha-dev") {
     void tenantId;
     await this._fetch(`/v2/orders/${orderId}`, userId, { method: "DELETE" });
-    deleteCacheKey(buildCacheKey("orders", userId));
+    deleteCacheKey(buildCacheKey("orders", [`user:${userId}`]));
+    deleteCacheKey(buildCacheKey("positions", [`user:${userId}`]));
+    deleteCacheKey(buildCacheKey("account", [`user:${userId}`]));
   }
 
   /**
@@ -199,9 +210,9 @@ export class AlpacaAdapter extends BrokerInterface {
    */
   async getQuote(symbol, userId, tenantId = "alpha-dev") {
     const normalizedSymbol = symbol.toUpperCase();
-    const cacheKey = buildCacheKey("alpacaQuote", normalizedSymbol, userId);
+    const cacheKey = buildCacheKey("brokerQuote", [`user:${userId}`, "alpaca", normalizedSymbol]);
 
-    const quote = await getOrSetCache(cacheKey, async () => {
+    const quote = await getOrSetCache(cacheKey, QUOTE_TTL, async () => {
       const response = await fetch(
         `${this._dataUrl}/v2/stocks/${normalizedSymbol}/quotes/latest`,
         { headers: this._headers(userId) }

@@ -1,18 +1,54 @@
 import axios from "axios";
-import { buildCacheKey, getOrSetCache } from "./cache.js";
+import {
+  buildCacheKey,
+  FUNDAMENTALS_TTL,
+  HISTORICAL_TTL,
+  MARKET_SNAPSHOT_TTL,
+  NEWS_TTL,
+  QUOTE_TTL,
+  getOrSetCache,
+} from "./cache.js";
 import { attachEntityScope, attachEntityScopeList } from "./entityMetadata.js";
-import { getAlpacaQuote } from "./brokerService.js";
 import { normalizePriceData } from "./normalizePriceData.js";
 import { fetchYahooHistorical } from "./yahooHistorical.js";
 import { normalizeHistoricalData } from "./normalizeHistoricalData.js";
 
 const DEFAULT_MARKET_SNAPSHOT_SYMBOLS = ["AAPL", "MSFT", "AMZN", "NVDA", "INTC"];
 
+async function fetchSharedAlpacaQuote(symbol) {
+  const normalizedSymbol = symbol.toUpperCase();
+  const response = await fetch(
+    `https://data.alpaca.markets/v2/stocks/${normalizedSymbol}/quotes/latest`,
+    {
+      headers: {
+        "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
+        "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_KEY,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Alpaca ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const latestQuote = data.quote || data;
+
+  return {
+    symbol: normalizedSymbol,
+    ap: latestQuote.ap || latestQuote.ask_price || null,
+    bp: latestQuote.bp || latestQuote.bid_price || null,
+    ask: latestQuote.ap || latestQuote.ask_price || null,
+    bid: latestQuote.bp || latestQuote.bid_price || null,
+    timestamp: latestQuote.t || latestQuote.timestamp || null,
+  };
+}
+
 export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
-  const cacheKey = buildCacheKey("fundamentals", normalizedSymbol, userId);
+  const cacheKey = buildCacheKey("fundamentals", [normalizedSymbol]);
 
-  return getOrSetCache(cacheKey, async () => {
+  const cached = await getOrSetCache(cacheKey, FUNDAMENTALS_TTL, async () => {
     const key = process.env.ALPHA_VANTAGE_API_KEY;
     const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${normalizedSymbol}&apikey=${key}`;
     const response = await axios.get(url);
@@ -24,7 +60,7 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
 
     const normalized = await normalizePriceData(normalizedSymbol, userId);
 
-    return attachEntityScope({
+    return {
       symbol: normalizedSymbol,
       name: data.Name,
       description: data.Description,
@@ -40,16 +76,18 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
       normalized52WeekLow: normalized.normalized52WeekLow,
       normalized52WeekSource: normalized.normalized52WeekSource,
       beta: data.Beta,
-    }, userId, tenantId);
+    };
   });
+
+  return cached ? attachEntityScope(cached, userId, tenantId) : null;
 }
 
 export async function getHistorical(symbol, timeframe = "1y", userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
   const normalizedTimeframe = String(timeframe || "1y").toLowerCase();
-  const cacheKey = buildCacheKey("history", normalizedSymbol, normalizedTimeframe, userId);
+  const cacheKey = buildCacheKey("history", [normalizedSymbol, normalizedTimeframe]);
 
-  return getOrSetCache(cacheKey, async () => {
+  const cached = await getOrSetCache(cacheKey, HISTORICAL_TTL, async () => {
     const raw = await fetchYahooHistorical(normalizedSymbol, normalizedTimeframe, userId);
     if (!raw || (Array.isArray(raw) && raw.length === 0)) {
       return null;
@@ -60,50 +98,58 @@ export async function getHistorical(symbol, timeframe = "1y", userId, tenantId =
       return null;
     }
 
-    return attachEntityScope({
+    return {
       symbol: normalizedSymbol,
       timeframe: normalizedTimeframe,
       candles,
       source: "yahoo_historical",
-    }, userId, tenantId);
+    };
   });
+
+  return cached ? attachEntityScope(cached, userId, tenantId) : null;
 }
 
 export async function getMarketQuote(symbol, userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
-  const cacheKey = buildCacheKey("quote", normalizedSymbol, userId);
+  const cacheKey = buildCacheKey("quote", [normalizedSymbol]);
 
-  return getOrSetCache(cacheKey, async () => {
+  const cached = await getOrSetCache(cacheKey, QUOTE_TTL, async () => {
     const key = process.env.ALPHA_VANTAGE_API_KEY;
     const response = await fetch(
       `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=${key}`
     );
     const data = await response.json();
-    return attachEntityScope(data["Global Quote"] || {}, userId, tenantId);
+    return data["Global Quote"] || {};
   });
+
+  return attachEntityScope(cached, userId, tenantId);
 }
 
 export async function getMarketNews(symbol, userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
-  const cacheKey = buildCacheKey("news", normalizedSymbol, userId);
+  const cacheKey = buildCacheKey("news", [normalizedSymbol]);
 
-  return getOrSetCache(cacheKey, async () => {
+  const cached = await getOrSetCache(cacheKey, NEWS_TTL, async () => {
     const key = process.env.ALPHA_VANTAGE_API_KEY;
     const response = await fetch(
       `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${normalizedSymbol}&limit=10&apikey=${key}`
     );
     const data = await response.json();
-    return attachEntityScopeList(data.feed || [], userId, tenantId);
+    return data.feed || [];
   });
+
+  return attachEntityScopeList(cached, userId, tenantId);
 }
 
 export async function getMarketSnapshot(userId, tenantId = "alpha-dev") {
-  const cacheKey = buildCacheKey("marketSnapshot", userId);
+  const cacheKey = buildCacheKey("snapshot", [DEFAULT_MARKET_SNAPSHOT_SYMBOLS.join(",")]);
 
-  return getOrSetCache(cacheKey, async () => {
+  const cached = await getOrSetCache(cacheKey, MARKET_SNAPSHOT_TTL, async () => {
     const quotes = await Promise.all(
-      DEFAULT_MARKET_SNAPSHOT_SYMBOLS.map((symbol) => getAlpacaQuote(symbol, userId, tenantId))
+      DEFAULT_MARKET_SNAPSHOT_SYMBOLS.map((symbol) => fetchSharedAlpacaQuote(symbol))
     );
-    return attachEntityScopeList(quotes, userId, tenantId);
+    return quotes;
   });
+
+  return attachEntityScopeList(cached, userId, tenantId);
 }

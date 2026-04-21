@@ -7,7 +7,15 @@
  */
 
 import { BrokerInterface } from "./BrokerInterface.js";
-import { buildCacheKey, deleteCacheByPrefix, getOrSetCache } from "../services/cache.js";
+import {
+  ACCOUNT_TTL,
+  ORDERS_TTL,
+  POSITIONS_TTL,
+  QUOTE_TTL,
+  buildCacheKey,
+  deleteCacheKey,
+  getOrSetCache,
+} from "../services/cache.js";
 import { attachEntityScope } from "../services/entityMetadata.js";
 
 export class OandaAdapter extends BrokerInterface {
@@ -52,9 +60,9 @@ export class OandaAdapter extends BrokerInterface {
    * @returns {Promise<import("./BrokerInterface.js").AccountSummary>}
    */
   async getAccountSummary(userId, tenantId = "alpha-dev") {
-    const cacheKey = buildCacheKey("oandaAccount", userId);
+    const cacheKey = buildCacheKey("account", [`user:${userId}`, "oanda"]);
 
-    const raw = await getOrSetCache(cacheKey, () =>
+    const raw = await getOrSetCache(cacheKey, ACCOUNT_TTL, () =>
       this._fetch(`/v3/accounts/${this._accountId}/summary`, userId)
     );
 
@@ -90,9 +98,9 @@ export class OandaAdapter extends BrokerInterface {
    * @returns {Promise<import("./BrokerInterface.js").Position[]>}
    */
   async getPositions(userId, tenantId = "alpha-dev") {
-    const cacheKey = buildCacheKey("oandaPositions", userId);
+    const cacheKey = buildCacheKey("positions", [`user:${userId}`, "oanda"]);
 
-    const raw = await getOrSetCache(cacheKey, () =>
+    const raw = await getOrSetCache(cacheKey, POSITIONS_TTL, () =>
       this._fetch(`/v3/accounts/${this._accountId}/openPositions`, userId)
     );
 
@@ -140,11 +148,13 @@ export class OandaAdapter extends BrokerInterface {
    * @param {string} [tenantId]
    */
   async getOrders(userId, tenantId = "alpha-dev") {
-    void tenantId;
-    const raw = await this._fetch(
-      `/v3/accounts/${this._accountId}/pendingOrders`,
-      userId
+    const cacheKey = buildCacheKey("orders", [`user:${userId}`, "oanda"]);
+    const raw = await getOrSetCache(
+      cacheKey,
+      ORDERS_TTL,
+      () => this._fetch(`/v3/accounts/${this._accountId}/pendingOrders`, userId)
     );
+
     return attachEntityScope(raw, userId, tenantId);
   }
 
@@ -165,7 +175,9 @@ export class OandaAdapter extends BrokerInterface {
       }
     );
 
-    deleteCacheByPrefix(buildCacheKey("oandaPositions", userId));
+    deleteCacheKey(buildCacheKey("positions", [`user:${userId}`, "oanda"]));
+    deleteCacheKey(buildCacheKey("orders", [`user:${userId}`, "oanda"]));
+    deleteCacheKey(buildCacheKey("account", [`user:${userId}`, "oanda"]));
     return attachEntityScope(data, userId, tenantId);
   }
 
@@ -177,12 +189,16 @@ export class OandaAdapter extends BrokerInterface {
    * @param {string} [tenantId]
    */
   async cancelOrder(orderId, userId, tenantId = "alpha-dev") {
-    void tenantId;
     await this._fetch(
       `/v3/accounts/${this._accountId}/orders/${orderId}/cancel`,
       userId,
       { method: "PUT" }
     );
+
+    deleteCacheKey(buildCacheKey("positions", [`user:${userId}`, "oanda"]));
+    deleteCacheKey(buildCacheKey("orders", [`user:${userId}`, "oanda"]));
+    deleteCacheKey(buildCacheKey("account", [`user:${userId}`, "oanda"]));
+    void tenantId;
   }
 
   /**
@@ -213,9 +229,9 @@ export class OandaAdapter extends BrokerInterface {
    */
   async getQuote(pair, userId, tenantId = "alpha-dev") {
     const instrument = pair.replace("/", "_");
-    const cacheKey = buildCacheKey("oandaPrice", instrument, userId);
+    const cacheKey = buildCacheKey("brokerQuote", [`user:${userId}`, "oanda", instrument]);
 
-    const data = await getOrSetCache(cacheKey, () =>
+    const data = await getOrSetCache(cacheKey, QUOTE_TTL, () =>
       this._fetch(
         `/v3/instruments/${instrument}/candles?count=1&granularity=S5&price=M`,
         userId
