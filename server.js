@@ -6,11 +6,28 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import authMiddleware from "./middleware/auth.js";
 import searchRoutes from "./routes/search.js";
-import axios from "axios";
-import { normalizePriceData } from "./services/normalizePriceData.js";
-import { fetchYahooHistorical } from "./services/yahooHistorical.js";
-import { normalizeHistoricalData } from "./services/normalizeHistoricalData.js";
+import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
+import {
+  createAlpacaOrder,
+  cancelAlpacaOrder,
+  getAlpacaAccount,
+  getAlpacaOrders,
+  getAlpacaPositions,
+  getAlpacaQuote,
+  createOandaOrder,
+  getOandaAccount,
+  getOandaPositions,
+  getOandaPrice,
+} from "./services/brokerService.js";
+import {
+  getFundamentals,
+  getHistorical,
+  getMarketNews,
+  getMarketQuote,
+  getMarketSnapshot,
+} from "./services/marketDataService.js";
 
 
 dotenv.config();
@@ -22,6 +39,7 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(authMiddleware);
 
 // Search route
 app.use("/api/search", searchRoutes);
@@ -40,44 +58,80 @@ const anthropic = new Anthropic({
 
 app.post("/api/assistant", async (req, res) => {
   try {
-    const { message, context } = req.body;
-    console.log("\n=== /api/assistant context ===");
-    console.log(JSON.stringify(context, null, 2));
+    const { message, context = {} } = req.body;
+    const { id: userId, tenantId } = req.user;
+    let account = context.account ? attachEntityScope(context.account, req.user) : null;
+    let positions = Array.isArray(context.positions)
+      ? attachEntityScopeList(context.positions, req.user)
+      : null;
+    let orders = Array.isArray(context.orders)
+      ? attachEntityScopeList(context.orders, req.user)
+      : null;
+    let marketSnapshot = Array.isArray(context.marketSnapshot)
+      ? attachEntityScopeList(context.marketSnapshot, req.user)
+      : null;
+    let fundamentals = null;
+    let history = null;
 
-   // Optional fundamentals injection (direct Alpha Vantage call)
-let fundamentals = null;
-
-if (context?.symbol) {
-  try {
-    const symbol = context.symbol.toUpperCase();
-    const raw = await getFundamentals(symbol);
-
-    if (raw && Object.keys(raw).length > 0) {
-      await mergeNormalizedFundamentals(symbol, raw);
-      fundamentals = {
-        symbol,
-        name: raw.Name,
-        description: raw.Description,
-        marketCap: raw.MarketCapitalization,
-        peRatio: raw.PERatio,
-        eps: raw.EPS,
-        dividendYield: raw.DividendYield,
-        profitMargin: raw.ProfitMargin,
-        analystTargetPrice: raw.AnalystTargetPrice,
-        week52High: raw["52WeekHigh"],
-        week52Low: raw["52WeekLow"],
-        normalized52WeekHigh: raw.normalized52WeekHigh,
-        normalized52WeekLow: raw.normalized52WeekLow,
-        normalized52WeekSource: raw.normalized52WeekSource,
-        beta: raw.Beta,
-      };
-    } else {
-      console.error("Assistant fundamentals: empty response for", symbol);
+    if (!account) {
+      try {
+        account = await getAlpacaAccount(userId, tenantId);
+      } catch (err) {
+        console.error("Assistant account error:", err.message);
+      }
     }
-  } catch (err) {
-    console.error("Assistant fundamentals error:", err);
-  }
-}
+
+    if (!positions) {
+      try {
+        positions = await getAlpacaPositions(userId, tenantId);
+      } catch (err) {
+        console.error("Assistant positions error:", err.message);
+      }
+    }
+
+    if (!orders) {
+      try {
+        orders = await getAlpacaOrders(userId, tenantId);
+      } catch (err) {
+        console.error("Assistant orders error:", err.message);
+      }
+    }
+
+    if (!marketSnapshot) {
+      try {
+        marketSnapshot = await getMarketSnapshot(userId, tenantId);
+      } catch (err) {
+        console.error("Assistant market snapshot error:", err.message);
+      }
+    }
+
+    const scopedContext = {
+      ...context,
+      userId,
+      tenantId,
+      account,
+      positions,
+      orders,
+      marketSnapshot,
+    };
+
+    console.log("\n=== /api/assistant context ===");
+    console.log(JSON.stringify(scopedContext, null, 2));
+
+    if (context?.symbol) {
+      const symbol = context.symbol.toUpperCase();
+
+      try {
+        fundamentals = await getFundamentals(symbol, userId, tenantId);
+        history = await getHistorical(symbol, "1y", userId, tenantId);
+
+        if (!fundamentals) {
+          console.error("Assistant fundamentals: empty response for", symbol);
+        }
+      } catch (err) {
+        console.error("Assistant fundamentals/history error:", err);
+      }
+    }
 
 
     const systemPrompt = `
@@ -105,16 +159,16 @@ if (context?.symbol) {
 
     const userContext = `
     Account:
-    ${JSON.stringify(context.account, null, 2)}
+    ${JSON.stringify(account, null, 2)}
 
     Positions:
-    ${JSON.stringify(context.positions, null, 2)}
+    ${JSON.stringify(positions, null, 2)}
 
     Orders:
-    ${JSON.stringify(context.orders, null, 2)}
+    ${JSON.stringify(orders, null, 2)}
 
     Market Snapshot:
-    ${JSON.stringify(context.marketSnapshot, null, 2)}
+    ${JSON.stringify({ userId, tenantId, snapshot: marketSnapshot, history }, null, 2)}
 
     Fundamentals:
     ${fundamentals ? JSON.stringify(fundamentals, null, 2) : "None"}
@@ -151,7 +205,9 @@ if (context?.symbol) {
 
 app.post("/api/ai/chat", async (req, res) => {
   try {
+    const { id: userId } = req.user;
     const { messages, system, max_tokens = 1000 } = req.body;
+    console.log("/api/ai/chat user:", userId);
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens,
@@ -169,25 +225,10 @@ app.post("/api/ai/chat", async (req, res) => {
 // Alpaca (Stocks & Options)
 // ─────────────────────────────────────────────────────────────
 
-const alpacaHeaders = () => ({
-  "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
-  "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_KEY,
-  "Content-Type": "application/json",
-});
-
-async function alpacaFetch(path, options = {}) {
-  const base = process.env.ALPACA_BASE_URL || "https://paper-api.alpaca.markets";
-  const r = await fetch(`${base}${path}`, {
-    headers: alpacaHeaders(),
-    ...options,
-  });
-  if (!r.ok) throw new Error(`Alpaca ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-
 app.get("/api/alpaca/account", async (req, res) => {
   try {
-    const data = await alpacaFetch("/v2/account");
+    const { id: userId, tenantId } = req.user;
+    const data = await getAlpacaAccount(userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -196,7 +237,8 @@ app.get("/api/alpaca/account", async (req, res) => {
 
 app.get("/api/alpaca/positions", async (req, res) => {
   try {
-    const data = await alpacaFetch("/v2/positions");
+    const { id: userId, tenantId } = req.user;
+    const data = await getAlpacaPositions(userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -205,7 +247,8 @@ app.get("/api/alpaca/positions", async (req, res) => {
 
 app.get("/api/alpaca/orders", async (req, res) => {
   try {
-    const data = await alpacaFetch("/v2/orders?status=all&limit=50");
+    const { id: userId, tenantId } = req.user;
+    const data = await getAlpacaOrders(userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -214,11 +257,9 @@ app.get("/api/alpaca/orders", async (req, res) => {
 
 app.post("/api/alpaca/orders", async (req, res) => {
   try {
+    const { id: userId, tenantId } = req.user;
     const order = req.body;
-    const data = await alpacaFetch("/v2/orders", {
-      method: "POST",
-      body: JSON.stringify(order),
-    });
+    const data = await createAlpacaOrder(order, userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -227,7 +268,8 @@ app.post("/api/alpaca/orders", async (req, res) => {
 
 app.delete("/api/alpaca/orders/:id", async (req, res) => {
   try {
-    await alpacaFetch(`/v2/orders/${req.params.id}`, { method: "DELETE" });
+    const { id: userId } = req.user;
+    await cancelAlpacaOrder(req.params.id, userId);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -236,17 +278,10 @@ app.delete("/api/alpaca/orders/:id", async (req, res) => {
 
 app.get("/api/alpaca/quote/:symbol", async (req, res) => {
   try {
-    const r = await fetch(
-      `https://data.alpaca.markets/v2/stocks/${req.params.symbol}/quotes/latest`,
-      { headers: alpacaHeaders() }
-    );
-    const data = await r.json();
-    const quote = data.quote || data;
+    const { id: userId, tenantId } = req.user;
+    const quote = await getAlpacaQuote(req.params.symbol, userId, tenantId);
 
-    res.json({
-      ap: quote.ap || quote.ask_price || null,
-      bp: quote.bp || quote.bid_price || null,
-    });
+    res.json(quote);
 
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -257,25 +292,10 @@ app.get("/api/alpaca/quote/:symbol", async (req, res) => {
 // OANDA (Forex)
 // ─────────────────────────────────────────────────────────────
 
-const oandaHeaders = () => ({
-  Authorization: `Bearer ${process.env.OANDA_API_KEY}`,
-  "Content-Type": "application/json",
-});
-
-async function oandaFetch(path, options = {}) {
-  const base = process.env.OANDA_BASE_URL || "https://api-fxpractice.oanda.com";
-  const r = await fetch(`${base}${path}`, {
-    headers: oandaHeaders(),
-    ...options,
-  });
-  if (!r.ok) throw new Error(`OANDA ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-
 app.get("/api/oanda/account", async (req, res) => {
   try {
-    const id = process.env.OANDA_ACCOUNT_ID;
-    const data = await oandaFetch(`/v3/accounts/${id}/summary`);
+    const { id: userId, tenantId } = req.user;
+    const data = await getOandaAccount(userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -284,8 +304,8 @@ app.get("/api/oanda/account", async (req, res) => {
 
 app.get("/api/oanda/positions", async (req, res) => {
   try {
-    const id = process.env.OANDA_ACCOUNT_ID;
-    const data = await oandaFetch(`/v3/accounts/${id}/openPositions`);
+    const { id: userId, tenantId } = req.user;
+    const data = await getOandaPositions(userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -294,11 +314,8 @@ app.get("/api/oanda/positions", async (req, res) => {
 
 app.post("/api/oanda/orders", async (req, res) => {
   try {
-    const id = process.env.OANDA_ACCOUNT_ID;
-    const data = await oandaFetch(`/v3/accounts/${id}/orders`, {
-      method: "POST",
-      body: JSON.stringify({ order: req.body }),
-    });
+    const { id: userId, tenantId } = req.user;
+    const data = await createOandaOrder(req.body, userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -307,10 +324,8 @@ app.post("/api/oanda/orders", async (req, res) => {
 
 app.get("/api/oanda/price/:pair", async (req, res) => {
   try {
-    const instrument = req.params.pair.replace("/", "_");
-    const data = await oandaFetch(
-      `/v3/instruments/${instrument}/candles?count=1&granularity=S5&price=M`
-    );
+    const { id: userId, tenantId } = req.user;
+    const data = await getOandaPrice(req.params.pair, userId, tenantId);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -321,54 +336,17 @@ app.get("/api/oanda/price/:pair", async (req, res) => {
 // Alpha Vantage (Market Data)
 // ─────────────────────────────────────────────────────────────
 
-// Alpha Vantage Fundamentals Client
-async function getFundamentals(symbol) {
-  const key = process.env.ALPHA_VANTAGE_API_KEY;
-  const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${key}`;
-  const response = await axios.get(url);
-  return response.data;
-}
-
-async function mergeNormalizedFundamentals(symbol, fundamentals) {
-  const normalized = await normalizePriceData(symbol);
-  fundamentals.normalized52WeekHigh = normalized.normalized52WeekHigh;
-  fundamentals.normalized52WeekLow = normalized.normalized52WeekLow;
-  fundamentals.normalized52WeekSource = normalized.normalized52WeekSource;
-
-  fundamentals["52WeekHigh"] = normalized.normalized52WeekHigh;
-  fundamentals["52WeekLow"] = normalized.normalized52WeekLow;
-
-  return fundamentals;
-}
-
 app.get("/api/fundamentals/:symbol", async (req, res) => {
   try {
+    const { id: userId, tenantId } = req.user;
     const symbol = req.params.symbol.toUpperCase();
-    const data = await getFundamentals(symbol);
+    const data = await getFundamentals(symbol, userId, tenantId);
 
-    if (!data || Object.keys(data).length === 0) {
+    if (!data) {
       return res.status(404).json({ error: "No fundamentals found" });
     }
 
-    await mergeNormalizedFundamentals(symbol, data);
-
-    res.json({
-      symbol,
-      name: data.Name,
-      description: data.Description,
-      marketCap: data.MarketCapitalization,
-      peRatio: data.PERatio,
-      eps: data.EPS,
-      dividendYield: data.DividendYield,
-      profitMargin: data.ProfitMargin,
-      analystTargetPrice: data.AnalystTargetPrice,
-      week52High: data["52WeekHigh"],
-      week52Low: data["52WeekLow"],
-      normalized52WeekHigh: data.normalized52WeekHigh,
-      normalized52WeekLow: data.normalized52WeekLow,
-      normalized52WeekSource: data.normalized52WeekSource,
-      beta: data.Beta
-    });
+    res.json(data);
   } catch (e) {
     console.error("Fundamentals error:", e.message);
     res.status(500).json({ error: "Failed to fetch fundamentals" });
@@ -377,25 +355,16 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
 
 app.get("/api/history/:symbol", async (req, res) => {
   try {
+    const { id: userId, tenantId } = req.user;
     const symbol = req.params.symbol.toUpperCase();
     const timeframe = String(req.query.timeframe || "1y").toLowerCase();
 
-    const raw = await fetchYahooHistorical(symbol, timeframe);
-    if (!raw || Array.isArray(raw) && raw.length === 0) {
+    const history = await getHistorical(symbol, timeframe, userId, tenantId);
+    if (!history) {
       return res.status(404).json({ error: `No historical data found for ${symbol}` });
     }
 
-    const candles = normalizeHistoricalData(raw);
-    if (candles.length === 0) {
-      return res.status(404).json({ error: `No valid historical candles found for ${symbol}` });
-    }
-
-    res.json({
-      symbol,
-      timeframe,
-      candles,
-      source: "yahoo_historical",
-    });
+    res.json(history);
   } catch (e) {
     if (e?.code === "YAHOO_PROXY_API_KEY_MISSING") {
       return res.status(500).json({ error: "Missing YAHOO_PROXY_API_KEY for Yahoo historical data" });
@@ -412,12 +381,9 @@ app.get("/api/history/:symbol", async (req, res) => {
 
 app.get("/api/market/quote/:symbol", async (req, res) => {
   try {
-    const key = process.env.ALPHA_VANTAGE_API_KEY;
-    const r = await fetch(
-      `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${req.params.symbol}&apikey=${key}`
-    );
-    const data = await r.json();
-    res.json(data["Global Quote"] || {});
+    const { id: userId, tenantId } = req.user;
+    const data = await getMarketQuote(req.params.symbol, userId, tenantId);
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -425,12 +391,9 @@ app.get("/api/market/quote/:symbol", async (req, res) => {
 
 app.get("/api/market/news/:symbol", async (req, res) => {
   try {
-    const key = process.env.ALPHA_VANTAGE_API_KEY;
-    const r = await fetch(
-      `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${req.params.symbol}&limit=10&apikey=${key}`
-    );
-    const data = await r.json();
-    res.json(data.feed || []);
+    const { id: userId, tenantId } = req.user;
+    const data = await getMarketNews(req.params.symbol, userId, tenantId);
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -441,8 +404,13 @@ app.get("/api/market/news/:symbol", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 app.get("/api/health", (req, res) => {
+  const { id: userId, tenantId } = req.user;
   res.json({
     status: "ok",
+    auth: {
+      userId,
+      tenantId,
+    },
     configured: {
       anthropic: !!process.env.ANTHROPIC_API_KEY,
       alpaca: !!process.env.ALPACA_API_KEY,

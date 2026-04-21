@@ -23,7 +23,8 @@ function buildYahooRows(data) {
     .filter(Boolean);
 }
 
-export async function fetchYahooDailyCloses(symbol) {
+export async function fetchYahooDailyCloses(symbol, userId) {
+  void userId;
   const urls = [
     `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1y`,
     `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1y`,
@@ -53,7 +54,8 @@ export async function fetchYahooDailyCloses(symbol) {
   throw new Error(`No Yahoo daily close data found for ${symbol}`);
 }
 
-export async function fetchYahooQuote52WeekRange(symbol) {
+export async function fetchYahooQuote52WeekRange(symbol, userId) {
+  void userId;
   const urls = [
     `https://query1.finance.yahoo.com/v6/finance/quote?symbols=${symbol}`,
     `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${symbol}`,

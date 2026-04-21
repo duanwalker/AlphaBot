@@ -1,29 +1,22 @@
 import express from "express";
-import axios from "axios";
+import { getAlpacaQuote } from "../services/brokerService.js";
 
 const router = express.Router();
 
 router.get("/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
+  const { id: userId, tenantId } = req.user;
 
   try {
-    const response = await axios.get(
-      `https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`,
-      {
-        headers: {
-          "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
-          "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_KEY,
-        },
-      }
-    );
-
-    const quote = response.data?.quote;
+    const quote = await getAlpacaQuote(symbol, userId, tenantId);
 
     res.json({
       symbol,
-      bid: quote?.bp ?? null,
-      ask: quote?.ap ?? null,
-      timestamp: quote?.t ?? null,
+      bid: quote?.bid ?? null,
+      ask: quote?.ask ?? null,
+      timestamp: quote?.timestamp ?? null,
+      userId,
+      tenantId,
     });
   } catch (err) {
     console.error("Search error:", err.response?.data || err.message);

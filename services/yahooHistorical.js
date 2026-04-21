@@ -39,7 +39,8 @@ function resolveDateRange(timeframe = "1y") {
   };
 }
 
-export async function fetchYahooHistorical(symbol, timeframe = "1y") {
+export async function fetchYahooHistorical(symbol, timeframe = "1y", userId) {
+  void userId;
   const apiKey = process.env.YAHOO_PROXY_API_KEY;
   if (!apiKey) {
     const error = new Error("Missing YAHOO_PROXY_API_KEY");

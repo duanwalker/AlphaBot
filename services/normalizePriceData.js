@@ -1,8 +1,8 @@
 import { fetchYahooDailyCloses } from "./yahooPriceData.js";
 import { fetchYahooProxyQuote } from "./yahooProxy.js";
 
-export async function normalizePriceData(symbol) {
-  const proxyQuote = await fetchYahooProxyQuote(symbol);
+export async function normalizePriceData(symbol, userId) {
+  const proxyQuote = await fetchYahooProxyQuote(symbol, userId);
 
   if (proxyQuote) {
     return {
@@ -12,7 +12,7 @@ export async function normalizePriceData(symbol) {
     };
   }
 
-  const prices = await fetchYahooDailyCloses(symbol);
+  const prices = await fetchYahooDailyCloses(symbol, userId);
 
   const closes = prices
     .map((row) => {

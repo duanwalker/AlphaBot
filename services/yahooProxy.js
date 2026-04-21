@@ -1,6 +1,7 @@
 import axios from "axios";
 
-export async function fetchYahooProxyQuote(symbol) {
+export async function fetchYahooProxyQuote(symbol, userId) {
+  void userId;
   const apiKey = process.env.YAHOO_PROXY_API_KEY;
 
   if (!apiKey) {
