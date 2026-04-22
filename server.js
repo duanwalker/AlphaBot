@@ -28,6 +28,13 @@ import {
   getMarketQuote,
   getMarketSnapshot,
 } from "./services/marketDataService.js";
+import {
+  compressFundamentals,
+  compressHistory,
+  compressPositions,
+  compressOrders,
+  compressSnapshot,
+} from "./services/compressionService.js";
 
 
 dotenv.config();
@@ -57,6 +64,7 @@ const anthropic = new Anthropic({
 // ─────────────────────────────────────────────────────────────
 
 app.post("/api/assistant", async (req, res) => {
+  console.time("[TIMING] assistant_total");
   try {
     const { message, context = {} } = req.body;
     const { id: userId, tenantId } = req.user;
@@ -73,129 +81,210 @@ app.post("/api/assistant", async (req, res) => {
     let fundamentals = null;
     let history = null;
 
-    if (!account) {
-      try {
-        account = await getAlpacaAccount(userId, tenantId);
-      } catch (err) {
-        console.error("Assistant account error:", err.message);
-      }
-    }
-
-    if (!positions) {
-      try {
-        positions = await getAlpacaPositions(userId, tenantId);
-      } catch (err) {
-        console.error("Assistant positions error:", err.message);
-      }
-    }
-
-    if (!orders) {
-      try {
-        orders = await getAlpacaOrders(userId, tenantId);
-      } catch (err) {
-        console.error("Assistant orders error:", err.message);
-      }
-    }
-
-    if (!marketSnapshot) {
-      try {
-        marketSnapshot = await getMarketSnapshot(userId, tenantId);
-      } catch (err) {
-        console.error("Assistant market snapshot error:", err.message);
-      }
-    }
-
-    const scopedContext = {
-      ...context,
-      userId,
-      tenantId,
-      account,
-      positions,
-      orders,
-      marketSnapshot,
-    };
-
-    console.log("\n=== /api/assistant context ===");
-    console.log(JSON.stringify(scopedContext, null, 2));
-
-    if (context?.symbol) {
-      const symbol = context.symbol.toUpperCase();
-
-      try {
-        fundamentals = await getFundamentals(symbol, userId, tenantId);
-        history = await getHistorical(symbol, "1y", userId, tenantId);
-
-        if (!fundamentals) {
-          console.error("Assistant fundamentals: empty response for", symbol);
+    console.time("[TIMING] fetch_data");
+    try {
+      if (!account) {
+        try {
+          account = await getAlpacaAccount(userId, tenantId);
+        } catch (err) {
+          console.error("Assistant account error:", err.message);
         }
-      } catch (err) {
-        console.error("Assistant fundamentals/history error:", err);
       }
+
+      if (!positions) {
+        try {
+          positions = await getAlpacaPositions(userId, tenantId);
+        } catch (err) {
+          console.error("Assistant positions error:", err.message);
+        }
+      }
+
+      if (!orders) {
+        try {
+          orders = await getAlpacaOrders(userId, tenantId);
+        } catch (err) {
+          console.error("Assistant orders error:", err.message);
+        }
+      }
+
+      if (!marketSnapshot) {
+        try {
+          marketSnapshot = await getMarketSnapshot(userId, tenantId);
+        } catch (err) {
+          console.error("Assistant market snapshot error:", err.message);
+        }
+      }
+
+      if (context?.symbol) {
+        const symbol = context.symbol.toUpperCase();
+
+        try {
+          fundamentals = await getFundamentals(symbol, userId, tenantId);
+          history = await getHistorical(symbol, "1y", userId, tenantId);
+
+          if (!fundamentals) {
+            console.error("Assistant fundamentals: empty response for", symbol);
+          }
+        } catch (err) {
+          console.error("Assistant fundamentals/history error:", err);
+        }
+      }
+    } finally {
+      console.timeEnd("[TIMING] fetch_data");
+    }
+
+    // ─── Research Mode (A2) Compression ───────────────────────────
+    console.time("[TIMING] compression");
+    const compressedPositions = compressPositions(positions);
+    const compressedOrders = compressOrders(orders);
+    const compressedFundamentals = compressFundamentals(fundamentals);
+    const compressedHistory = compressHistory(history);
+    const compressedSnapshot = compressSnapshot(marketSnapshot);
+    console.timeEnd("[TIMING] compression");
+
+    let userContext;
+    console.time("[TIMING] context_payload");
+    try {
+      // Build compressed research-friendly payload
+      const compressed = {
+        account: account ? {
+          buyingPower: account.buyingPower || null,
+          cash: account.cash || null,
+          portfolioValue: account.equity || null,
+          dayPL: account.dayPL || null,
+          dayPLPercent: account.dayPLPercent || null,
+        } : null,
+        positions: compressedPositions,
+        orders: compressedOrders,
+        fundamentals: compressedFundamentals,
+        history: compressedHistory,
+        snapshot: compressedSnapshot,
+        symbol: context.symbol || null,
+        userId,
+        tenantId,
+      };
+
+      console.log("\n=== /api/assistant compressed context (Research Mode A2) ===");
+      console.log(JSON.stringify(compressed, null, 2));
+
+      userContext = `
+You will receive compressed research data for the symbol in JSON format.
+
+Compressed Account Data:
+${JSON.stringify(compressed.account, null, 2)}
+
+Compressed Positions (symbol, qty, avgEntryPrice, currentPrice, unrealizedPL, unrealizedPLPercent):
+${JSON.stringify(compressed.positions, null, 2)}
+
+Compressed Orders (symbol, side, qty, status, filledAvgPrice):
+${JSON.stringify(compressed.orders, null, 2)}
+
+Compressed Fundamentals (symbol, marketCap, peRatio, pegRatio, eps, revenueTTM, profitMargin, dividendYield, beta, fiftyTwoWeekHigh, fiftyTwoWeekLow, sector, industry):
+${JSON.stringify(compressed.fundamentals, null, 2)}
+
+Compressed History (oneYearChangePercent, oneYearVolatility, oneYearHigh, oneYearLow, trendSummary, sparkline):
+${JSON.stringify(compressed.history, null, 2)}
+
+Compressed Market Snapshot (symbol, bid, ask, last, timestamp):
+${JSON.stringify(compressed.snapshot, null, 2)}
+    `;
+    } finally {
+      console.timeEnd("[TIMING] context_payload");
     }
 
 
     const systemPrompt = `
     You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
-    Your purpose is to turn the provided portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
+    Your purpose is to turn the provided compressed portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
+    
+    RESEARCH MODE (A2): You will receive COMPRESSED research data to reduce token usage while preserving analytical depth.
     Operating assumptions:
     - Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
-    - Use ONLY the information provided in the conversation/dashboard inputs. If critical data is missing, do not fabricate it—state what’s missing and proceed using explicit assumptions or request the missing inputs.
+    - Use ONLY the COMPRESSED information provided. Do NOT assume missing fields—they are intentionally compressed.
+    - Do NOT request additional data beyond what's provided.
     - Be decisive when data is sufficient; be transparent when it is not.
     Core tasks:
     1) Explain market concepts, mechanics, and strategies (stocks + options).
-    2) Analyze current positions, open orders, watchlist names, and market data supplied by the user.
-    3) Propose trade candidates that fit the portfolio constraints and the user’s stated goals.
-    4) Provide a clear rationale, risk analysis, and explicit invalidation criteria for each idea.
+    2) Analyze current positions using compressed data (compressed fundamentals, compressed history, compressed positions, compressed orders, compressed snapshot).
+    3) Propose trade candidates that fit portfolio constraints and user's stated goals.
+    4) Provide clear rationale, risk analysis, and explicit invalidation criteria.
     When you make recommendations:
-    - Provide your reasoning in a compact, checkable way.
+    - Provide reasoning in a compact, checkable way.
     - Include at least one alternative path.
     - Tie every suggestion to available buying power, position sizing, and risk controls.
+    - Reference only the compressed fields provided (do not invent missing fields).
     Output requirements:
-    A) Snapshot
-    B) Primary idea
-    C) Secondary ideas
-    D) Questions needed
+    A) Snapshot (current state analysis)
+    B) Primary idea (best opportunity)
+    C) Secondary ideas (2-3 alternatives)
+    D) Questions needed (if data gaps exist)
     `;
 
-    const userContext = `
-    Account:
-    ${JSON.stringify(account, null, 2)}
-
-    Positions:
-    ${JSON.stringify(positions, null, 2)}
-
-    Orders:
-    ${JSON.stringify(orders, null, 2)}
-
-    Market Snapshot:
-    ${JSON.stringify({ userId, tenantId, snapshot: marketSnapshot, history }, null, 2)}
-
-    Fundamentals:
-    ${fundamentals ? JSON.stringify(fundamentals, null, 2) : "None"}
-    `;
-
-    const completion = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1500,
-      temperature: 0.3,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: userContext },
-            { type: "text", text: `User message: ${message}` }
-          ]
-        }
-      ]
-    });
+    let completion;
+    console.time("[TIMING] claude_call");
+    try {
+      completion = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userContext },
+              { type: "text", text: `User message: ${message}` }
+            ]
+          }
+        ]
+      });
+    } finally {
+      console.timeEnd("[TIMING] claude_call");
+    }
 
     const reply = completion.content?.[0]?.text || "No response generated.";
-    res.json({ reply });
+
+    // ─── Usage Metering (B1 Logging Only) ──────────────────────────────
+    console.time("[TIMING] usage_metering");
+    try {
+      const usage = completion?.usage || {};
+      const inputTokens = usage.input_tokens || 0;
+      const outputTokens = usage.output_tokens || 0;
+      const totalTokens = inputTokens + outputTokens;
+
+      // Anthropic Sonnet 3.5 pricing (as of April 2026)
+      const inputCostPerToken = 0.000003;  // $3 per million input tokens
+      const outputCostPerToken = 0.000015; // $15 per million output tokens
+      const cost = (inputTokens * inputCostPerToken) + (outputTokens * outputCostPerToken);
+
+      const usageEvent = {
+        timestamp: new Date().toISOString(),
+        userId,
+        model: "claude-3.5-sonnet",
+        symbol: context.symbol || null,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        costUSD: Number(cost.toFixed(6)),
+      };
+
+      console.log("[USAGE]", JSON.stringify(usageEvent, null, 2));
+    } finally {
+      console.timeEnd("[TIMING] usage_metering");
+    }
+
+    console.time("[TIMING] response_send");
+    try {
+      res.json({ reply });
+    } finally {
+      console.timeEnd("[TIMING] response_send");
+    }
 
   } catch (err) {
     console.error("Assistant error:", err);
     res.status(500).json({ error: "Assistant failed" });
+  } finally {
+    console.timeEnd("[TIMING] assistant_total");
   }
 });
 
