@@ -3,6 +3,12 @@ import useAlpaca from "./hooks/useAlpaca";
 import { useState } from "react";
 
 import AssistantPanel from "./components/AssistantPanel";
+import SettingsLayout from "./pages/Settings/SettingsLayout";
+import Profile from "./pages/Settings/Profile";
+import BillingUsage from "./pages/Settings/BillingUsage";
+import ApiKeys from "./pages/Settings/ApiKeys";
+import Preferences from "./pages/Settings/Preferences";
+import About from "./pages/Settings/About";
 
 // ⭐ You forgot this import — this is why your pages weren't rendering
 import Dashboard from "./pages/Dashboard";
@@ -88,10 +94,14 @@ function App() {
             />
 
             {/* SETTINGS PAGE */}
-            <Route
-              path="/settings"
-              element={<h1>Settings (placeholder)</h1>}
-            />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Profile />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="billing" element={<BillingUsage />} />
+              <Route path="api-keys" element={<ApiKeys />} />
+              <Route path="preferences" element={<Preferences />} />
+              <Route path="about" element={<About />} />
+            </Route>
 
           </Routes>
         </main>

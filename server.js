@@ -488,6 +488,27 @@ app.get("/api/market/news/:symbol", async (req, res) => {
   }
 });
 
+// Usage logs stub (B1 Logging Only)
+app.get("/api/usage/logs", (req, res) => {
+  res.json({
+    summary: {
+      totalTokens: 12345,
+      totalCost: 0.42,
+      totalRequests: 18,
+    },
+    events: [
+      {
+        timestamp: "2026-04-21T23:01:12Z",
+        symbol: "HIMX",
+        inputTokens: 812,
+        outputTokens: 412,
+        totalTokens: 1224,
+        cost: 0.00312,
+      },
+    ],
+  });
+});
+
 // ─────────────────────────────────────────────────────────────
 // Health Check
 // ─────────────────────────────────────────────────────────────

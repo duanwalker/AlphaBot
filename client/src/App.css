@@ -340,6 +340,137 @@ body::before {
   transition: background 0.2s ease;
 }
 
+/* ====== SETTINGS ====== */
+
+.settings-page {
+  width: 100%;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.settings-sidebar {
+  padding: 16px;
+  min-height: 0;
+}
+
+.settings-sidebar-title {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+
+.settings-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-sidebar-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.settings-sidebar-link:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-sidebar-link.active {
+  color: var(--text-main);
+  border-color: rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.16);
+}
+
+.settings-content {
+  min-height: 360px;
+}
+
+.settings-copy {
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.settings-error {
+  color: #fca5a5;
+  margin: 10px 0;
+}
+
+.settings-metrics-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-metric {
+  min-height: 96px;
+  padding: 16px;
+}
+
+.settings-metric-label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-metric-value {
+  margin-top: 6px;
+  display: block;
+  font-size: 24px;
+}
+
+.settings-block {
+  margin-top: 16px;
+}
+
+.usage-chart {
+  margin-top: 8px;
+  height: 180px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.usage-chart-item {
+  flex: 1;
+  min-width: 10px;
+  display: flex;
+  align-items: end;
+  height: 100%;
+}
+
+.usage-chart-bar {
+  width: 100%;
+  border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, #7c83ff 0%, #4f46e5 100%);
+}
+
+.settings-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+@media (max-width: 980px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .qa-btn:hover {
   background: #eaeaea;
 }
