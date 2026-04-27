@@ -8,6 +8,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authMiddleware from "./middleware/auth.js";
 import searchRoutes from "./routes/search.js";
+import sentimentRoutes from "./routes/sentiment.js";
 import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
 import {
   createAlpacaOrder,
@@ -50,6 +51,7 @@ app.use(authMiddleware);
 
 // Search route
 app.use("/api/search", searchRoutes);
+app.use("/api/sentiment", sentimentRoutes);
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic Client
