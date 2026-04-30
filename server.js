@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import authMiddleware from "./middleware/auth.js";
 import searchRoutes from "./routes/search.js";
 import sentimentRoutes from "./routes/sentiment.js";
+import { startSentimentScheduler } from "./services/sentimentScheduler.js";
 import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
 import {
   createAlpacaOrder,
@@ -52,6 +53,11 @@ app.use(authMiddleware);
 // Search route
 app.use("/api/search", searchRoutes);
 app.use("/api/sentiment", sentimentRoutes);
+
+// ─────────────────────────────────────────────────────────────
+// Sentiment Scheduler
+// ─────────────────────────────────────────────────────────────
+startSentimentScheduler();
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic Client

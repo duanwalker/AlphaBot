@@ -24,6 +24,7 @@ export const MARKET_SNAPSHOT_TTL = 30 * 1000;
 export const POSITIONS_TTL = 30 * 1000;
 export const ORDERS_TTL = 30 * 1000;
 export const ACCOUNT_TTL = 30 * 1000;
+export const SENTIMENT_TTL = 15 * 60 * 1000;
 
 function normalizePart(part) {
   if (part === undefined || part === null || part === "") {
