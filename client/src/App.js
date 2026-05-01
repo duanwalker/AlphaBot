@@ -9,6 +9,7 @@ import BillingUsage from "./pages/Settings/BillingUsage";
 import ApiKeys from "./pages/Settings/ApiKeys";
 import Preferences from "./pages/Settings/Preferences";
 import About from "./pages/Settings/About";
+import Research from "./pages/Research";
 
 // ⭐ You forgot this import — this is why your pages weren't rendering
 import Dashboard from "./pages/Dashboard";
@@ -78,7 +79,7 @@ function App() {
             {/* RESEARCH PAGE */}
             <Route
               path="/research"
-              element={<h1>Research (placeholder)</h1>}
+              element={<Research />}
             />
 
             {/* ORDERS PAGE */}
