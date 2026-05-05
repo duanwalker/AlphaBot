@@ -22,7 +22,7 @@ export default function Research() {
   async function loadWatchlist() {
     const data = await getSentimentWatchlist();
     const symbols = Array.isArray(data?.watchlist)
-      ? data.watchlist.map((entry) => normalizeSymbol(entry.symbol)).filter(Boolean)
+      ? data.watchlist.map((entry) => normalizeSymbol(entry.symbol || entry.ticker)).filter(Boolean)
       : [];
     setWatchlist(symbols);
     return symbols;

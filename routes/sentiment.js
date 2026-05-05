@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  addToWatchlist,
   addToWatchList,
   getSnapshotHistory,
   getWatchList,
@@ -11,6 +12,60 @@ const router = express.Router();
 function normalizeSymbol(symbol) {
   return String(symbol || "").trim().toUpperCase();
 }
+
+function isValidSymbol(symbol) {
+  return /^[A-Z0-9]+$/.test(symbol);
+}
+
+function getSymbolValidationReason(rawSymbol) {
+  const trimmed = String(rawSymbol || "").trim();
+
+  if (!trimmed) {
+    return "Symbol is required";
+  }
+
+  if (!/^[a-z0-9]+$/i.test(trimmed)) {
+    return "Symbol must be alphanumeric";
+  }
+
+  return null;
+}
+
+function getNormalizedSymbolOrError(rawSymbol) {
+  const symbol = normalizeSymbol(rawSymbol);
+  if (!symbol || !isValidSymbol(symbol)) {
+    return {
+      error: "Invalid symbol. Symbol must be non-empty and alphanumeric.",
+      symbol: null,
+    };
+  }
+
+  return { error: null, symbol };
+}
+
+const sentimentDb = {
+  async addToWatchlist(symbol, req) {
+    const userId = String(req?.user?.id || "").trim();
+    if (!userId) {
+      throw new Error("Missing req.user.id while adding watchlist symbol");
+    }
+
+    await addToWatchList(userId, symbol);
+  },
+
+  async removeFromWatchlist(symbol, req) {
+    const userId = String(req?.user?.id || "").trim();
+    if (!userId) {
+      throw new Error("Missing req.user.id while removing watchlist symbol");
+    }
+
+    await removeFromWatchList(userId, symbol);
+  },
+
+  async getHistory(symbol) {
+    return getSnapshotHistory(symbol);
+  },
+};
 
 router.get("/watchlist", async (req, res) => {
   try {
@@ -24,54 +79,81 @@ router.get("/watchlist", async (req, res) => {
 });
 
 router.post("/watchlist/:symbol", async (req, res) => {
+  const rawSymbol = req.params.symbol;
+  const symbol = normalizeSymbol(rawSymbol);
+  const user = req.user
+    ? { id: req.user.id, tenantId: req.user.tenantId }
+    : null;
+
+  console.log("[ROUTE] POST /api/sentiment/watchlist called", {
+    rawSymbol,
+    normalized: symbol,
+    user,
+    body: req.body,
+  });
+
+  const validationReason = getSymbolValidationReason(rawSymbol);
+  if (validationReason) {
+    return res.status(400).json({
+      error: "Invalid symbol",
+      reason: validationReason,
+    });
+  }
+
   try {
-    const { id: userId } = req.user;
-    const symbol = normalizeSymbol(req.params.symbol);
-
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
-    }
-
-    const entry = await addToWatchList(userId, symbol);
-    return res.status(201).json({ added: entry });
+    await addToWatchlist(symbol, req.user);
+    return res.json({ success: true, symbol });
   } catch (err) {
-    console.error("Sentiment watchlist add error:", err.message);
-    return res.status(500).json({ error: "Failed to add watchlist symbol" });
+    console.error("[ROUTE ERROR] sentimentRoute:addToWatchlist", {
+      symbol,
+      user,
+      message: err?.message,
+      stack: err?.stack,
+    });
+
+    return res.status(500).json({
+      error: "Failed to add watchlist symbol",
+      details: err?.message || "Unknown error",
+    });
   }
 });
 
 router.delete("/watchlist/:symbol", async (req, res) => {
   try {
-    const { id: userId } = req.user;
-    const symbol = normalizeSymbol(req.params.symbol);
+    const { error, symbol } = getNormalizedSymbolOrError(req.params.symbol);
 
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
+    if (error) {
+      return res.status(400).json({ error });
     }
 
-    const entry = await removeFromWatchList(userId, symbol);
-    return res.json({ removed: entry });
+    await sentimentDb.removeFromWatchlist(symbol, req);
+
+    return res.json({ success: true, symbol });
   } catch (err) {
-    console.error("Sentiment watchlist remove error:", err.message);
-    return res.status(500).json({ error: "Failed to remove watchlist symbol" });
+    console.error("Sentiment watchlist remove error:", err);
+    return res.status(500).json({
+      error: "Failed to remove symbol from watchlist",
+      message: err?.message || "Unexpected sentiment watchlist remove error",
+    });
   }
 });
 
 router.get("/:symbol/history", async (req, res) => {
   try {
-    const symbol = normalizeSymbol(req.params.symbol);
-    const requestedDays = Number(req.query.days || 30);
-    const days = Number.isFinite(requestedDays) ? Math.max(1, requestedDays) : 30;
+    const { error, symbol } = getNormalizedSymbolOrError(req.params.symbol);
 
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
+    if (error) {
+      return res.status(400).json({ error });
     }
 
-    const history = await getSnapshotHistory(symbol, days);
-    return res.json({ symbol, days, history });
+    const history = await sentimentDb.getHistory(symbol);
+    return res.json(history);
   } catch (err) {
-    console.error("Sentiment history error:", err.message);
-    return res.status(500).json({ error: "Failed to load sentiment history" });
+    console.error("Sentiment history error:", err);
+    return res.status(500).json({
+      error: "Failed to load sentiment history",
+      message: err?.message || "Unexpected sentiment history error",
+    });
   }
 });
 

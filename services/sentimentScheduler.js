@@ -1,8 +1,8 @@
-import { TableClient } from "@azure/data-tables";
-import { runSentimentPipeline } from "./sentimentService.js";
+import { fetchSentimentSnapshot } from "./sentimentFetcher.js";
+import * as sentimentDb from "./sentimentDb.js";
 
-// ─── Schedule configuration ────────────────────────────────
-// Three runs per weekday in US Eastern Time (UTC offsets are handled below).
+// --- Schedule configuration ------------------------------------------------
+// Three runs per weekday in US Eastern Time.
 // 09:15 ET, 13:00 ET, 16:10 ET
 const SCHEDULE_ET_TIMES = [
   { hour: 9, minute: 15 },
@@ -16,19 +16,12 @@ const POLL_INTERVAL_MS = 60 * 1000;
 // Track which (date + slot) combinations have already fired this calendar day.
 const firedSlots = new Set();
 
-function getEasternOffset() {
-  // JavaScript Intl resolves DST automatically.
-  const now = new Date();
-  const etString = now.toLocaleString("en-US", { timeZone: "America/New_York" });
-  const etDate = new Date(etString);
-  // Returns offset in hours (ET = UTC-4 during EDT, UTC-5 during EST).
-  return (now.getTime() - etDate.getTime()) / (60 * 60 * 1000);
+function normalizeSymbol(symbol) {
+  return String(symbol || "").trim().toUpperCase();
 }
 
 function toEasternDate(date) {
-  return new Date(
-    date.toLocaleString("en-US", { timeZone: "America/New_York" })
-  );
+  return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
 }
 
 function isWeekday(etDate) {
@@ -36,57 +29,75 @@ function isWeekday(etDate) {
   return day >= 1 && day <= 5;
 }
 
-async function fetchActiveWatchlistTickers() {
-  const connectionString =
-    process.env.AZURE_TABLE_CONNECTION_STRING ||
-    process.env.AZURE_STORAGE_CONNECTION_STRING ||
-    process.env.AzureWebJobsStorage;
-
-  if (!connectionString) {
-    console.warn("[SCHEDULER] No Azure Table Storage connection string — skipping watchlist fetch.");
-    return [];
+function extractTicker(entry) {
+  if (typeof entry === "string") {
+    return normalizeSymbol(entry);
   }
 
-  const client = TableClient.fromConnectionString(connectionString, "sentimentWatchList");
-  const tickerSet = new Set();
+  return normalizeSymbol(entry?.ticker || entry?.symbol || entry?.RowKey);
+}
 
-  for await (const entity of client.listEntities({
-    queryOptions: { filter: "isActive eq true" },
-  })) {
-    if (entity.RowKey) {
-      tickerSet.add(String(entity.RowKey).trim().toUpperCase());
-    }
+async function getWatchlistSymbols() {
+  if (typeof sentimentDb.getWatchlist === "function") {
+    const watchlist = await sentimentDb.getWatchlist();
+    return [...new Set((watchlist || []).map(extractTicker).filter(Boolean))];
   }
 
-  return [...tickerSet];
+  if (typeof sentimentDb.getWatchList === "function") {
+    const userId = String(process.env.SENTIMENT_SCHEDULER_USER_ID || "alpha-dev").trim();
+    const watchlist = await sentimentDb.getWatchList(userId);
+    return [...new Set((watchlist || []).map(extractTicker).filter(Boolean))];
+  }
+
+  throw new Error("sentimentDb.getWatchlist() is not available");
+}
+
+async function saveSnapshot(symbol, snapshot) {
+  if (typeof sentimentDb.saveSnapshot === "function") {
+    await sentimentDb.saveSnapshot(symbol, snapshot);
+    return;
+  }
+
+  if (typeof sentimentDb.persistSnapshot === "function") {
+    await sentimentDb.persistSnapshot({
+      ...snapshot,
+      symbol,
+      ticker: symbol,
+    });
+    return;
+  }
+
+  throw new Error("sentimentDb.saveSnapshot(symbol, snapshot) is not available");
 }
 
 async function runScheduledRefresh() {
-  console.log("[SCHEDULER] Starting scheduled sentiment refresh…");
+  console.log("[SCHEDULER] Starting scheduled sentiment refresh...");
 
-  let tickers;
+  let symbols;
   try {
-    tickers = await fetchActiveWatchlistTickers();
+    symbols = await getWatchlistSymbols();
   } catch (err) {
-    console.error("[SCHEDULER] Failed to fetch watchlist:", err.message);
+    console.error("[SCHEDULER] Failed to load watchlist symbols:", err?.message || err);
     return;
   }
 
-  if (!tickers.length) {
-    console.log("[SCHEDULER] Watchlist is empty — nothing to refresh.");
+  if (!symbols.length) {
+    console.log("[SCHEDULER] Watchlist is empty, nothing to refresh.");
     return;
   }
 
-  console.log(`[SCHEDULER] Refreshing ${tickers.length} ticker(s): ${tickers.join(", ")}`);
+  console.log(`[SCHEDULER] Refreshing ${symbols.length} symbol(s): ${symbols.join(", ")}`);
 
-  for (const ticker of tickers) {
-    console.time(`[SCHEDULER] ${ticker}`);
+  for (const symbol of symbols) {
+    console.time(`[SCHEDULER] ${symbol}`);
     try {
-      await runSentimentPipeline(ticker);
+      const snapshot = await fetchSentimentSnapshot(symbol);
+      await saveSnapshot(symbol, snapshot);
+      console.log(`[SCHEDULER] Saved snapshot for ${symbol} (${snapshot.sampleSize} samples).`);
     } catch (err) {
-      console.error(`[SCHEDULER] Error refreshing ${ticker}:`, err.message);
+      console.error(`[SCHEDULER] Failed ${symbol}:`, err?.message || err);
     } finally {
-      console.timeEnd(`[SCHEDULER] ${ticker}`);
+      console.timeEnd(`[SCHEDULER] ${symbol}`);
     }
   }
 
@@ -114,7 +125,7 @@ export function startSentimentScheduler() {
       if (etHour === slot.hour && etMinute === slot.minute && !firedSlots.has(slotKey)) {
         firedSlots.add(slotKey);
         runScheduledRefresh().catch((err) => {
-          console.error("[SCHEDULER] Unhandled refresh error:", err.message);
+          console.error("[SCHEDULER] Unhandled refresh error:", err?.message || err);
         });
         break;
       }

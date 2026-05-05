@@ -7,7 +7,9 @@ async function requestJson(path, options) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const message = data?.error || `Request failed (${response.status})`;
+    const message = data?.details
+      ? `${data?.error || "Request failed"}: ${data.details}`
+      : (data?.error || `Request failed (${response.status})`);
     throw new Error(message);
   }
 

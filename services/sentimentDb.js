@@ -1,36 +1,122 @@
+import 'dotenv/config';
 import { TableClient } from "@azure/data-tables";
 
 const SNAPSHOTS_TABLE = "sentimentSnapshots";
 const WATCHLIST_TABLE = "sentimentWatchList";
 
-const connectionString =
-  process.env.AZURE_TABLE_CONNECTION_STRING ||
-  process.env.AZURE_STORAGE_CONNECTION_STRING ||
-  process.env.AzureWebJobsStorage;
+const TRANSIENT_ERROR_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENETDOWN",
+  "ENETRESET",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ESOCKETTIMEDOUT",
+  "ETIMEDOUT",
+  "REQUEST_SEND_ERROR",
+]);
 
-if (!connectionString) {
-  throw new Error(
-    "Missing Azure Table Storage connection string. Set AZURE_TABLE_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING."
-  );
-}
-
-const snapshotTableClient = TableClient.fromConnectionString(connectionString, SNAPSHOTS_TABLE);
-const watchListTableClient = TableClient.fromConnectionString(connectionString, WATCHLIST_TABLE);
+let snapshotTableClient;
+let watchListTableClient;
 
 let tablesInitialized = false;
 
-async function ensureTables() {
+function getConnectionString({ requireAzureStorage = false } = {}) {
+  const azureStorageConnectionString = String(process.env.AZURE_STORAGE_CONNECTION_STRING || "").trim();
+
+  if (requireAzureStorage && !azureStorageConnectionString) {
+    throw new Error("Missing AZURE_STORAGE_CONNECTION_STRING");
+  }
+
+  return (
+    azureStorageConnectionString ||
+    process.env.AZURE_TABLE_CONNECTION_STRING ||
+    process.env.AzureWebJobsStorage ||
+    ""
+  );
+}
+
+function getSnapshotTableClient() {
+  if (!snapshotTableClient) {
+    const connectionString = getConnectionString();
+    if (!connectionString) {
+      throw new Error(
+        "Missing Azure Table Storage connection string. Set AZURE_STORAGE_CONNECTION_STRING or AZURE_TABLE_CONNECTION_STRING."
+      );
+    }
+
+    snapshotTableClient = TableClient.fromConnectionString(connectionString, SNAPSHOTS_TABLE);
+  }
+
+  return snapshotTableClient;
+}
+
+function getWatchListTableClient({ requireAzureStorage = false } = {}) {
+  if (requireAzureStorage) {
+    getConnectionString({ requireAzureStorage: true });
+  }
+
+  if (!watchListTableClient) {
+    const connectionString = getConnectionString({ requireAzureStorage });
+    if (!connectionString) {
+      throw new Error(
+        "Missing Azure Table Storage connection string. Set AZURE_STORAGE_CONNECTION_STRING or AZURE_TABLE_CONNECTION_STRING."
+      );
+    }
+
+    watchListTableClient = TableClient.fromConnectionString(connectionString, WATCHLIST_TABLE);
+  }
+
+  return watchListTableClient;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientWriteError(err) {
+  const errorCode = String(err?.code || err?.name || "").toUpperCase();
+  const message = String(err?.message || "").toLowerCase();
+  const statusCode = Number(err?.statusCode || err?.status || 0);
+
+  return (
+    TRANSIENT_ERROR_CODES.has(errorCode) ||
+    statusCode >= 500 ||
+    message.includes("timeout") ||
+    message.includes("network") ||
+    message.includes("socket") ||
+    message.includes("temporarily unavailable")
+  );
+}
+
+function getUserContext(user) {
+  if (typeof user === "string") {
+    return {
+      id: String(user || "").trim() || null,
+      tenantId: null,
+    };
+  }
+
+  return {
+    id: String(user?.id || "").trim() || null,
+    tenantId: String(user?.tenantId || "").trim() || null,
+  };
+}
+
+async function ensureTables(options = {}) {
   if (tablesInitialized) {
     return;
   }
 
   await Promise.all([
-    snapshotTableClient.createTable().catch((err) => {
+    getSnapshotTableClient().createTable().catch((err) => {
       if (err?.statusCode !== 409) {
         throw err;
       }
     }),
-    watchListTableClient.createTable().catch((err) => {
+    getWatchListTableClient(options).createTable().catch((err) => {
       if (err?.statusCode !== 409) {
         throw err;
       }
@@ -130,7 +216,7 @@ export async function persistSnapshot(payload = {}) {
 
   Object.assign(entity, flattenNotablePosts(payload.notablePosts));
 
-  await snapshotTableClient.upsertEntity(entity, "Merge");
+  await getSnapshotTableClient().upsertEntity(entity, "Merge");
 
   return entity;
 }
@@ -150,7 +236,7 @@ export async function getSnapshotHistory(ticker, days = 30) {
   const filter = `PartitionKey eq '${normalizedTicker}' and RowKey ge '${start}'`;
   const history = [];
 
-  for await (const entity of snapshotTableClient.listEntities({ queryOptions: { filter } })) {
+  for await (const entity of getSnapshotTableClient().listEntities({ queryOptions: { filter } })) {
     history.push(parseDrivers(entity));
   }
 
@@ -169,10 +255,10 @@ export async function getWatchList(userId) {
   const filter = `PartitionKey eq '${normalizedUserId}' and isActive eq true`;
   const entries = [];
 
-  for await (const entity of watchListTableClient.listEntities({ queryOptions: { filter } })) {
+  for await (const entity of getWatchListTableClient().listEntities({ queryOptions: { filter } })) {
     entries.push({
-      userId: entity.PartitionKey,
-      ticker: entity.RowKey,
+      userId: entity.partitionKey || entity.PartitionKey,
+      ticker: entity.rowKey || entity.RowKey,
       isActive: entity.isActive === true,
       updatedAt: entity.updatedAt || null,
     });
@@ -183,8 +269,6 @@ export async function getWatchList(userId) {
 }
 
 export async function addToWatchList(userId, ticker) {
-  await ensureTables();
-
   const normalizedUserId = String(userId || "").trim();
   const normalizedTicker = normalizeTicker(ticker);
 
@@ -192,24 +276,110 @@ export async function addToWatchList(userId, ticker) {
     throw new Error("addToWatchList requires userId and ticker");
   }
 
+  await ensureTables({ requireAzureStorage: true });
+
   const now = new Date().toISOString();
   const entity = {
-    PartitionKey: normalizedUserId,
-    RowKey: normalizedTicker,
+    partitionKey: normalizedUserId,
+    rowKey: normalizedTicker,
     userId: normalizedUserId,
     ticker: normalizedTicker,
     isActive: true,
     updatedAt: now,
   };
 
-  await watchListTableClient.upsertEntity(entity, "Merge");
+  const retryDelaysMs = [200, 600];
+  let attempt = 0;
 
-  return {
-    userId: normalizedUserId,
-    ticker: normalizedTicker,
-    isActive: true,
-    updatedAt: now,
-  };
+  while (true) {
+    try {
+      await getWatchListTableClient({ requireAzureStorage: true }).upsertEntity(entity, "Merge");
+
+      return {
+        userId: normalizedUserId,
+        ticker: normalizedTicker,
+        isActive: true,
+        updatedAt: now,
+      };
+    } catch (err) {
+      const shouldRetry = attempt < 1 && isTransientWriteError(err);
+
+      if (shouldRetry) {
+        const delayMs = retryDelaysMs[attempt];
+        console.warn("[DB] addToWatchlist retry", {
+          symbol: normalizedTicker,
+          attempt: attempt + 2,
+          delayMs,
+          message: err?.message,
+        });
+        attempt += 1;
+        await sleep(delayMs);
+        continue;
+      }
+
+      console.error('[DB ERROR] addToWatchlist', {
+        symbol: normalizedTicker,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      throw err;
+    }
+  }
+}
+
+export async function addToWatchlist(symbol, user) {
+  const normalizedTicker = normalizeTicker(symbol);
+  const userContext = getUserContext(user);
+
+  console.log("[DB] addToWatchlist", {
+    symbol: normalizedTicker,
+    user: userContext,
+  });
+
+  if (!String(process.env.AZURE_STORAGE_CONNECTION_STRING || "").trim()) {
+    const err = new Error("Missing AZURE_STORAGE_CONNECTION_STRING");
+    console.error('[DB ERROR] addToWatchlist', {
+      symbol: normalizedTicker,
+      message: err.message,
+      stack: err.stack,
+    });
+    throw err;
+  }
+
+  if (!normalizedTicker) {
+    const err = new Error("addToWatchlist requires symbol");
+    console.error('[DB ERROR] addToWatchlist', {
+      symbol: normalizedTicker,
+      message: err.message,
+      stack: err.stack,
+    });
+    throw err;
+  }
+
+  if (!userContext.id) {
+    const err = new Error("addToWatchlist requires user.id");
+    console.error('[DB ERROR] addToWatchlist', {
+      symbol: normalizedTicker,
+      message: err.message,
+      stack: err.stack,
+    });
+    throw err;
+  }
+
+  try {
+    const savedEntity = await addToWatchList(userContext.id, normalizedTicker);
+    console.log("[DB] addToWatchlist success", {
+      symbol: normalizedTicker,
+    });
+    return savedEntity;
+  } catch (err) {
+    console.error('[DB ERROR] addToWatchlist', {
+      symbol: normalizedTicker,
+      message: err?.message,
+      stack: err?.stack,
+    });
+    throw err;
+  }
 }
 
 export async function removeFromWatchList(userId, ticker) {
@@ -224,15 +394,15 @@ export async function removeFromWatchList(userId, ticker) {
 
   const now = new Date().toISOString();
   const entity = {
-    PartitionKey: normalizedUserId,
-    RowKey: normalizedTicker,
+    partitionKey: normalizedUserId,
+    rowKey: normalizedTicker,
     userId: normalizedUserId,
     ticker: normalizedTicker,
     isActive: false,
     updatedAt: now,
   };
 
-  await watchListTableClient.upsertEntity(entity, "Merge");
+  await getWatchListTableClient().upsertEntity(entity, "Merge");
 
   return {
     userId: normalizedUserId,
