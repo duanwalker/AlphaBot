@@ -44,7 +44,7 @@ async function getWatchlistSymbols() {
   }
 
   if (typeof sentimentDb.getWatchList === "function") {
-    const userId = String(process.env.SENTIMENT_SCHEDULER_USER_ID || "alpha-dev").trim();
+    const userId = String(process.env.DEFAULT_USER_ID || "dev-user").trim();
     const watchlist = await sentimentDb.getWatchList(userId);
     return [...new Set((watchlist || []).map(extractTicker).filter(Boolean))];
   }
@@ -89,12 +89,16 @@ async function runScheduledRefresh() {
   console.log(`[SCHEDULER] Refreshing ${symbols.length} symbol(s): ${symbols.join(", ")}`);
 
   for (const symbol of symbols) {
+    console.log("Processing symbol:", symbol);
     console.time(`[SCHEDULER] ${symbol}`);
     try {
       const snapshot = await fetchSentimentSnapshot(symbol);
+      console.log("SNAPSHOT RESULT:", symbol, snapshot);
       await saveSnapshot(symbol, snapshot);
+      console.log("SAVED SNAPSHOT:", symbol);
       console.log(`[SCHEDULER] Saved snapshot for ${symbol} (${snapshot.sampleSize} samples).`);
     } catch (err) {
+      console.error("SAVE SNAPSHOT ERROR:", err);
       console.error(`[SCHEDULER] Failed ${symbol}:`, err?.message || err);
     } finally {
       console.timeEnd(`[SCHEDULER] ${symbol}`);
@@ -105,9 +109,15 @@ async function runScheduledRefresh() {
 }
 
 export function startSentimentScheduler() {
+  console.log("Sentiment Scheduler: STARTED");
+  console.log("Sentiment Scheduler: FORCED STARTUP RUN");
+  runScheduledRefresh().catch((err) => {
+    console.error("[SCHEDULER] Forced startup refresh error:", err?.message || err);
+  });
   console.log("[SCHEDULER] Sentiment scheduler started. Polling every 60 s for ET schedule.");
 
   setInterval(() => {
+    console.log("Sentiment Scheduler: Running cycle at", new Date().toISOString());
     const now = new Date();
     const etNow = toEasternDate(now);
 

@@ -10,6 +10,19 @@ model.eval()
 
 
 def score(text):
+    # Normalize text to ensure it is safe for the tokenizer
+    if not isinstance(text, str):
+        text = str(text)
+
+    # Strip whitespace and remove control characters
+    text = text.strip().replace("\n", " ").replace("\r", " ")
+
+    # Remove HTML tags
+    import re
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
     inputs = tokenizer(
         text,
         return_tensors="pt",
@@ -30,5 +43,10 @@ def score(text):
 
 
 posts = json.loads(sys.stdin.read())
-results = [{**post, **score(post["text"])} for post in posts]
+results = []
+for post in posts:
+    text = post.get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        continue
+    results.append({**post, **score(text)})
 print(json.dumps(results))

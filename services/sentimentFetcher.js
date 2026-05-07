@@ -91,7 +91,11 @@ async function analyzePostSentiment(posts) {
   }
 
   if (typeof finbertService.scorePosts === "function") {
-    const scoredPosts = await finbertService.scorePosts(posts);
+    const cleanedPosts = posts
+      .filter((p) => typeof p.text === "string" && p.text.trim().length > 0)
+      .map((p) => ({ ...p, text: p.text.trim() }));
+
+    const scoredPosts = await finbertService.scorePosts(cleanedPosts);
     return scoredPosts.map((post) => normalizeScoredPost(post));
   }
 
@@ -165,6 +169,7 @@ function aggregateSentiment(scoredPosts) {
 
 export async function fetchSentimentSnapshot(symbol) {
   const normalizedSymbol = validateAndNormalizeSymbol(symbol);
+  console.log("FETCH START:", normalizedSymbol);
 
   try {
     const [redditPosts, stocktwitsPosts] = await Promise.all([
@@ -191,6 +196,7 @@ export async function fetchSentimentSnapshot(symbol) {
       topNegativePosts: selectTopPosts(scoredPosts, "negative"),
     };
   } catch (err) {
+    console.log("FETCH ERROR:", normalizedSymbol, err);
     throw new Error(
       `Failed to fetch sentiment snapshot for ${normalizedSymbol}: ${err?.message || "unknown error"}`
     );
