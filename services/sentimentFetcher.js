@@ -1,6 +1,7 @@
 import * as redditService from "./redditService.js";
 import * as stocktwitsService from "./stocktwitsService.js";
 import * as finbertService from "./finbertService.js";
+import * as reasoningAgent from "./reasoningAgent.js";
 
 const SYMBOL_PATTERN = /^[A-Z0-9]+$/;
 
@@ -67,15 +68,47 @@ function normalizeScoredPost(post = {}) {
   };
 }
 
-async function analyzePostSentiment(posts) {
+async function buildReasonedPosts(symbol, posts) {
+  const reasonedPosts = [];
+
+  for (const post of posts) {
+    const fallbackText = typeof post.text === "string" ? post.text.trim() : "";
+
+    if (!fallbackText) {
+      continue;
+    }
+
+    let summary = fallbackText;
+
+    try {
+      summary = await reasoningAgent.analyzePost(fallbackText);
+    } catch (err) {
+      console.warn(`[CLAUDE] Failed for ${symbol}: ${err?.message || "unknown error"}`);
+    }
+
+    const text = typeof summary === "string" && summary.trim() ? summary.trim() : fallbackText;
+    console.log(`[CLAUDE] Summary for ${symbol}: "${text}"`);
+    reasonedPosts.push({ ...post, text });
+  }
+
+  return reasonedPosts;
+}
+
+async function analyzePostSentiment(symbol, posts) {
   if (!posts.length) {
+    return [];
+  }
+
+  const reasonedPosts = await buildReasonedPosts(symbol, posts);
+
+  if (!reasonedPosts.length) {
     return [];
   }
 
   if (typeof finbertService.analyzeSentiment === "function") {
     const scored = [];
 
-    for (const post of posts) {
+    for (const post of reasonedPosts) {
       const analysis = await finbertService.analyzeSentiment(post.text);
       scored.push(
         normalizeScoredPost({
@@ -91,7 +124,7 @@ async function analyzePostSentiment(posts) {
   }
 
   if (typeof finbertService.scorePosts === "function") {
-    const cleanedPosts = posts
+    const cleanedPosts = reasonedPosts
       .filter((p) => typeof p.text === "string" && p.text.trim().length > 0)
       .map((p) => ({ ...p, text: p.text.trim() }));
 
@@ -181,7 +214,7 @@ export async function fetchSentimentSnapshot(symbol) {
       .map((post) => normalizePost(post))
       .filter((post) => post.text);
 
-    const scoredPosts = await analyzePostSentiment(combinedPosts);
+    const scoredPosts = await analyzePostSentiment(normalizedSymbol, combinedPosts);
     const sentiment = aggregateSentiment(scoredPosts);
 
     return {

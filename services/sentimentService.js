@@ -88,7 +88,7 @@ function normalizeAgentPayload(raw = {}) {
 
 export async function runSentimentAgent(ticker, top30Posts) {
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-3-5-haiku-latest",
     max_tokens: 1200,
     temperature: 0.2,
     system: `You are a market sentiment analyst for AlphaBot. Analyze the supplied social posts for a single ticker and return only valid JSON.
@@ -149,16 +149,23 @@ export async function runSentimentPipeline(ticker) {
   const scoredPosts = await scorePosts(allPosts);
   const top30Posts = selectTop30(scoredPosts);
   const agentPayload = await runSentimentAgent(normalizedTicker, top30Posts);
+  const timestamp = new Date().toISOString();
 
   const payload = {
     ticker: normalizedTicker,
-    timestamp: new Date().toISOString(),
+    timestamp,
     postVolume: allPosts.length,
     volumeVsAvgPct: computeVolumeVsAvg(normalizedTicker, allPosts.length),
     ...agentPayload,
   };
 
-  persistSnapshot(payload).catch((err) => {
+  const snapshot = {
+    partitionKey: normalizedTicker,
+    rowKey: timestamp,
+    ...payload,
+  };
+
+  persistSnapshot(snapshot).catch((err) => {
     console.error(`Sentiment snapshot persist failed for ${normalizedTicker}:`, err.message);
   });
 

@@ -268,7 +268,7 @@ ${JSON.stringify(compressed.snapshot, null, 2)}
       const usageEvent = {
         timestamp: new Date().toISOString(),
         userId,
-        model: "claude-3.5-sonnet",
+        model: "claude-sonnet-4-6",
         symbol: context.symbol || null,
         inputTokens,
         outputTokens,
@@ -304,9 +304,11 @@ app.post("/api/ai/chat", async (req, res) => {
   try {
     const { id: userId } = req.user;
     const { messages, system, max_tokens = 1000 } = req.body;
-    console.log("/api/ai/chat user:", userId);
+    res.set("Deprecation", "true");
+    console.warn("[DEPRECATED] /api/ai/chat invoked using claude-sonnet-4-6");
+    console.log("[LEGACY] /api/ai/chat invoked", { userId, model: "claude-sonnet-4-6" });
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens,
       system,
       messages,
