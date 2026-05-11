@@ -195,18 +195,23 @@ export async function persistSnapshot(payload = {}) {
   const rowKey = new Date(timestamp).toISOString();
 
   const entity = {
-    PartitionKey: ticker,
-    RowKey: rowKey,
+    partitionKey: ticker,
+    rowKey,
     ticker,
     timestamp: rowKey,
   };
 
   Object.entries(payload).forEach(([key, value]) => {
-    if (["PartitionKey", "RowKey", "notablePosts", "symbol"].includes(key) || value === undefined) {
+    if (["partitionKey", "rowKey", "PartitionKey", "RowKey", "notablePosts", "symbol", "topPositivePosts", "topNegativePosts"].includes(key) || value === undefined) {
       return;
     }
 
-    if (key.toLowerCase().includes("driver") && typeof value === "object" && value !== null) {
+    if (["positiveDrivers", "negativeDrivers"].includes(key) && Array.isArray(value)) {
+      entity[key] = JSON.stringify(value);
+      return;
+    }
+
+    if (typeof value === "object" && value !== null) {
       entity[key] = JSON.stringify(value);
       return;
     }
