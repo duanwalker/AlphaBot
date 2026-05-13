@@ -3,7 +3,7 @@ import PositionsCard from "../components/PositionsCard";
 import OrdersCard from "../components/OrdersCard";
 import MarketSnapshot from "../components/MarketSnapshot";
 import QuickActions from "../components/QuickActions";
-import SentimentCard from "../components/SentimentCard";
+import SentimentDashboardCard from "../components/sentiment/SentimentDashboardCard";
 import HistoricalSparklineCard from "../components/HistoricalSparklineCard";
 
 export default function Dashboard({
@@ -44,7 +44,7 @@ export default function Dashboard({
 
         <QuickActions onSymbolSelected={setActiveSymbol} />
 
-        <SentimentCard />
+        <SentimentDashboardCard />
       </section>
 
       {/* Bottom Grid: Positions + Orders */}
