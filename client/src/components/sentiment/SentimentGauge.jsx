@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { isSnapshotStale } from "../../utils/sentimentSchedule";
 
 const GAUGE_WIDTH = 320;
 const GAUGE_HEIGHT = 190;
@@ -68,7 +69,7 @@ function formatTimestamp(timestamp) {
   });
 }
 
-export default function SentimentGauge({ ticker, snapshot, loading, error, isStale }) {
+export default function SentimentGauge({ ticker, snapshot, loading, error }) {
   const gaugeValue = useMemo(() => toGaugeValue(snapshot?.averageScore), [snapshot]);
   const gaugeLabel = useMemo(() => describeSentiment(gaugeValue), [gaugeValue]);
 
@@ -82,6 +83,7 @@ export default function SentimentGauge({ ticker, snapshot, loading, error, isSta
 
   const updatedLabel = formatTimestamp(snapshot?.timestamp);
   const noData = !snapshot;
+  const stale = useMemo(() => isSnapshotStale(snapshot), [snapshot]);
 
   return (
     <div
@@ -132,6 +134,7 @@ export default function SentimentGauge({ ticker, snapshot, loading, error, isSta
                 stroke="#f8fafc"
                 strokeWidth="3"
                 strokeLinecap="round"
+                style={{ filter: "drop-shadow(0 0 2px rgba(0,0,0,0.4))" }}
               />
             </g>
           )}
@@ -163,12 +166,19 @@ export default function SentimentGauge({ ticker, snapshot, loading, error, isSta
         ) : (
           <>
             <div style={{ fontSize: 14, color: "#cbd5e1" }}>{ticker || "No symbol selected"}</div>
-            <div style={{ fontSize: 27, fontWeight: 700 }}>
-              {loading ? "..." : Number.isFinite(gaugeValue) ? `${gaugeValue.toFixed(1)} / 100` : "--"}
+            <div style={{ transition: "opacity 300ms ease", opacity: loading ? 0 : 1 }}>
+              <div style={{ fontSize: 27, fontWeight: 700 }}>
+                {loading ? "..." : Number.isFinite(gaugeValue) ? `${gaugeValue.toFixed(1)} / 100` : "--"}
+              </div>
             </div>
             <div style={{ fontSize: 14, color: "#94a3b8" }}>{gaugeLabel}</div>
-            {isStale && !noData && (
-              <div style={{ marginTop: 4, fontSize: 12, color: "#fbbf24", fontWeight: 600 }}>⚠ Stale</div>
+            {stale && !noData && (
+              <div
+                title="Sentiment is older than the most recent scheduled run"
+                style={{ marginTop: 4, fontSize: 12, color: "#fbbf24", fontWeight: 600 }}
+              >
+                ⚠ Stale
+              </div>
             )}
             {updatedLabel && (
               <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8" }}>Updated {updatedLabel}</div>

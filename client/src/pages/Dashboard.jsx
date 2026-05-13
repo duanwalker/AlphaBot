@@ -26,7 +26,7 @@ export default function Dashboard({
 
       {error && <div className="alert error">{error}</div>}
 
-      {/* Top Grid: Account, Market Snapshot, Quick Actions, Sentiment */}
+      {/* Top Grid: Account, Market Snapshot, Historical, Quick Actions */}
       <section className="grid grid-4">
         <AccountCard
           account={account}
@@ -43,7 +43,9 @@ export default function Dashboard({
         <HistoricalSparklineCard symbol={activeSymbol || "AAPL"} />
 
         <QuickActions onSymbolSelected={setActiveSymbol} />
+      </section>
 
+      <section className="grid grid-1">
         <SentimentDashboardCard />
       </section>
 
