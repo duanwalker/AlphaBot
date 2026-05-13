@@ -249,6 +249,14 @@ export async function getSnapshotHistory(ticker, days = 30) {
   return history;
 }
 
+export async function getLatestSnapshot(ticker) {
+  const history = await getSnapshotHistory(ticker, 7);
+  if (!Array.isArray(history) || history.length === 0) {
+    return null;
+  }
+  return history[history.length - 1];
+}
+
 export async function getWatchList(userId) {
   await ensureTables();
 

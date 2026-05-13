@@ -2,6 +2,7 @@ import express from "express";
 import {
   addToWatchlist,
   addToWatchList,
+  getLatestSnapshot,
   getSnapshotHistory,
   getWatchList,
   removeFromWatchList,
@@ -135,6 +136,48 @@ router.delete("/watchlist/:symbol", async (req, res) => {
       error: "Failed to remove symbol from watchlist",
       message: err?.message || "Unexpected sentiment watchlist remove error",
     });
+  }
+});
+
+// GET latest sentiment snapshot
+router.get("/latest/:ticker", async (req, res) => {
+  try {
+    const ticker = String(req.params.ticker || "").trim().toUpperCase();
+    if (!ticker) {
+      return res.status(400).json({ error: "Ticker is required" });
+    }
+
+    const snapshot = await getLatestSnapshot(ticker);
+    if (!snapshot) {
+      return res.status(404).json({ error: "No sentiment data found" });
+    }
+
+    return res.json(snapshot);
+  } catch (err) {
+    console.error("[API ERROR] /api/sentiment/latest", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET sentiment history
+router.get("/history/:ticker", async (req, res) => {
+  try {
+    const ticker = String(req.params.ticker || "").trim().toUpperCase();
+    let days = Number(req.query.days || 30);
+
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      days = 30;
+    }
+
+    if (!ticker) {
+      return res.status(400).json({ error: "Ticker is required" });
+    }
+
+    const history = await getSnapshotHistory(ticker, days);
+    return res.json(history);
+  } catch (err) {
+    console.error("[API ERROR] /api/sentiment/history", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
