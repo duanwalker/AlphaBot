@@ -1,40 +1,19 @@
 import React, { useMemo } from "react";
+import useLatestSentiment from "../../hooks/useLatestSentiment";
 import { isSnapshotStale } from "../../utils/sentimentSchedule";
+import {
+  BEARISH_THRESHOLD,
+  BULLISH_THRESHOLD,
+  getSentimentLabel,
+  readSentimentScore,
+  toGaugeAngle,
+} from "../../utils/sentimentNormalization";
 
 const GAUGE_WIDTH = 320;
 const GAUGE_HEIGHT = 190;
 const CENTER_X = GAUGE_WIDTH / 2;
 const CENTER_Y = 160;
 const RADIUS = 110;
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function toGaugeValue(averageScore) {
-  const score = Number(averageScore);
-  if (!Number.isFinite(score)) {
-    return null;
-  }
-
-  return clamp((score + 1) * 50, 0, 100);
-}
-
-function describeSentiment(value) {
-  if (!Number.isFinite(value)) {
-    return "No data yet";
-  }
-
-  if (value < 45) {
-    return "Bearish";
-  }
-
-  if (value > 55) {
-    return "Bullish";
-  }
-
-  return "Neutral";
-}
 
 function polarToCartesian(cx, cy, radius, angle) {
   const radians = ((angle - 90) * Math.PI) / 180;
@@ -70,20 +49,32 @@ function formatTimestamp(timestamp) {
 }
 
 export default function SentimentGauge({ ticker, snapshot, loading, error }) {
-  const gaugeValue = useMemo(() => toGaugeValue(snapshot?.averageScore), [snapshot]);
-  const gaugeLabel = useMemo(() => describeSentiment(gaugeValue), [gaugeValue]);
+  const {
+    data: latestSnapshot,
+    loading: latestLoading,
+    error: latestError,
+  } = useLatestSentiment(ticker);
+
+  const resolvedSnapshot = latestSnapshot ?? snapshot ?? null;
+  const resolvedLoading = latestLoading || loading;
+  const resolvedError = latestError || error;
+
+  const normalizedScore = useMemo(() => readSentimentScore(resolvedSnapshot), [resolvedSnapshot]);
+  const gaugeLabel = useMemo(() => getSentimentLabel(normalizedScore), [normalizedScore]);
 
   const needleAngle = useMemo(() => {
-    if (!Number.isFinite(gaugeValue)) {
+    if (!Number.isFinite(normalizedScore)) {
       return -90;
     }
 
-    return -90 + (gaugeValue / 100) * 180;
-  }, [gaugeValue]);
+    return toGaugeAngle(normalizedScore, -90, 90);
+  }, [normalizedScore]);
 
-  const updatedLabel = formatTimestamp(snapshot?.timestamp);
-  const noData = !snapshot;
-  const stale = useMemo(() => isSnapshotStale(snapshot), [snapshot]);
+  const updatedLabel = formatTimestamp(resolvedSnapshot?.timestamp);
+  const noData = !resolvedSnapshot;
+  const stale = useMemo(() => isSnapshotStale(resolvedSnapshot), [resolvedSnapshot]);
+  const bearishEnd = toGaugeAngle(BEARISH_THRESHOLD, -90, 90);
+  const neutralEnd = toGaugeAngle(BULLISH_THRESHOLD, -90, 90);
 
   return (
     <div
@@ -97,21 +88,21 @@ export default function SentimentGauge({ ticker, snapshot, loading, error }) {
       <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
         <svg width="100%" viewBox={`0 0 ${GAUGE_WIDTH} ${GAUGE_HEIGHT}`}>
           <path
-            d={arcPath(CENTER_X, CENTER_Y, RADIUS, -90, -18)}
+            d={arcPath(CENTER_X, CENTER_Y, RADIUS, -90, bearishEnd)}
             stroke="rgba(217, 83, 79, 0.88)"
             strokeWidth="18"
             fill="none"
             strokeLinecap="round"
           />
           <path
-            d={arcPath(CENTER_X, CENTER_Y, RADIUS, -18, 18)}
+            d={arcPath(CENTER_X, CENTER_Y, RADIUS, bearishEnd, neutralEnd)}
             stroke="rgba(240, 173, 78, 0.88)"
             strokeWidth="18"
             fill="none"
             strokeLinecap="round"
           />
           <path
-            d={arcPath(CENTER_X, CENTER_Y, RADIUS, 18, 90)}
+            d={arcPath(CENTER_X, CENTER_Y, RADIUS, neutralEnd, 90)}
             stroke="rgba(92, 184, 92, 0.9)"
             strokeWidth="18"
             fill="none"
@@ -158,17 +149,17 @@ export default function SentimentGauge({ ticker, snapshot, loading, error }) {
       </div>
 
       <div style={{ marginTop: -10, textAlign: "center" }}>
-        {error ? (
+        {resolvedError ? (
           <>
             <div style={{ fontSize: 14, color: "#fda4af", fontWeight: 600 }}>Error loading sentiment</div>
-            <div style={{ fontSize: 12, color: "#fecdd3" }}>{error}</div>
+            <div style={{ fontSize: 12, color: "#fecdd3" }}>{resolvedError}</div>
           </>
         ) : (
           <>
             <div style={{ fontSize: 14, color: "#cbd5e1" }}>{ticker || "No symbol selected"}</div>
-            <div style={{ transition: "opacity 300ms ease", opacity: loading ? 0 : 1 }}>
+            <div style={{ transition: "opacity 300ms ease", opacity: resolvedLoading ? 0 : 1 }}>
               <div style={{ fontSize: 27, fontWeight: 700 }}>
-                {loading ? "..." : Number.isFinite(gaugeValue) ? `${gaugeValue.toFixed(1)} / 100` : "--"}
+                {resolvedLoading ? "..." : Number.isFinite(normalizedScore) ? normalizedScore.toFixed(2) : "--"}
               </div>
             </div>
             <div style={{ fontSize: 14, color: "#94a3b8" }}>{gaugeLabel}</div>

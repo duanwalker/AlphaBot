@@ -1,14 +1,26 @@
 import React, { memo, useMemo } from "react";
 import useLatestSentiment from "../../hooks/useLatestSentiment";
 import { isSnapshotStale } from "../../utils/sentimentSchedule";
+import SentimentArrow from "./SentimentArrow";
 
-function normalizedScore(snapshot) {
-  const averageScore = Number(snapshot?.averageScore);
-  if (!Number.isFinite(averageScore)) {
+const BULLISH_THRESHOLD = 0.15;
+const BEARISH_THRESHOLD = -0.15;
+
+function readSentimentScore(snapshot) {
+  const raw = Number(snapshot?.averageScore ?? snapshot?.score);
+  if (!Number.isFinite(raw)) {
     return null;
   }
 
-  return Math.min(1, Math.max(0, (averageScore + 1) / 2));
+  if (raw >= -1 && raw <= 1) {
+    return raw;
+  }
+
+  if (raw >= 0 && raw <= 100) {
+    return Math.max(-1, Math.min(1, raw / 50 - 1));
+  }
+
+  return Math.max(-1, Math.min(1, raw));
 }
 
 function formatUpdated(timestamp) {
@@ -24,24 +36,25 @@ function formatUpdated(timestamp) {
   return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function getTrendArrow(current, previous) {
-  if (!Number.isFinite(current) || !Number.isFinite(previous)) {
-    return "→";
+function getSentimentLabel(score) {
+  if (!Number.isFinite(score)) {
+    return "Neutral";
   }
 
-  if (current > previous + 0.01) {
-    return "↑";
+  if (score > BULLISH_THRESHOLD) {
+    return "Bullish";
   }
 
-  if (current < previous - 0.01) {
-    return "↓";
+  if (score < BEARISH_THRESHOLD) {
+    return "Bearish";
   }
 
-  return "→";
+  return "Neutral";
 }
 
 function MiniSentimentBar({ score }) {
-  const barWidth = `${Math.round((score || 0) * 100)}%`;
+  const unitScore = Number.isFinite(score) ? Math.max(0, Math.min(1, (score + 1) / 2)) : 0.5;
+  const barWidth = `${Math.round(unitScore * 100)}%`;
 
   return (
     <div
@@ -67,17 +80,8 @@ function MiniSentimentBar({ score }) {
 function SentimentRow({ symbol, selected, onSelect }) {
   const { data: snapshot } = useLatestSentiment(symbol);
 
-  const score = normalizedScore(snapshot);
-  const previousScore = useMemo(() => {
-    const previousAverageScore = Number(snapshot?.previousAverageScore);
-    if (!Number.isFinite(previousAverageScore)) {
-      return null;
-    }
-
-    return Math.min(1, Math.max(0, (previousAverageScore + 1) / 2));
-  }, [snapshot]);
-
-  const trendArrow = getTrendArrow(score, previousScore);
+  const score = useMemo(() => readSentimentScore(snapshot), [snapshot]);
+  const label = useMemo(() => getSentimentLabel(score), [score]);
   const stale = useMemo(() => isSnapshotStale(snapshot), [snapshot]);
   const updatedLabel = formatUpdated(snapshot?.timestamp);
 
@@ -103,7 +107,7 @@ function SentimentRow({ symbol, selected, onSelect }) {
           transition: "background 220ms ease, border-color 220ms ease",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 60px 20px", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 68px 74px 24px", gap: 10, alignItems: "center" }}>
           <div style={{ fontWeight: 700, letterSpacing: "0.04em" }}>{symbol}</div>
 
           <MiniSentimentBar score={score} />
@@ -112,7 +116,11 @@ function SentimentRow({ symbol, selected, onSelect }) {
             {Number.isFinite(score) ? score.toFixed(2) : "--"}
           </div>
 
-          <div style={{ fontSize: 16, textAlign: "center" }}>{trendArrow}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1" }}>{label}</div>
+
+          <div style={{ fontSize: 16, textAlign: "center" }}>
+            <SentimentArrow score={score} />
+          </div>
         </div>
 
         <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", display: "flex", gap: 10, alignItems: "center" }}>

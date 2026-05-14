@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { normalizeSentimentSnapshot } from "../utils/sentimentNormalization";
 
 function normalizeTicker(ticker) {
   return String(ticker || "").trim().toUpperCase();
@@ -33,7 +34,7 @@ export default function useLatestSentiment(ticker) {
         });
 
         if (!isStale) {
-          setData(response?.data ?? null);
+          setData(normalizeSentimentSnapshot(response?.data ?? null));
         }
       } catch (err) {
         if (controller.signal.aborted || isStale) {
