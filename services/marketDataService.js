@@ -6,7 +6,9 @@ import {
   MARKET_SNAPSHOT_TTL,
   NEWS_TTL,
   QUOTE_TTL,
+  getCache,
   getOrSetCache,
+  setCache,
 } from "./cache.js";
 import { attachEntityScope, attachEntityScopeList } from "./entityMetadata.js";
 import { normalizePriceData } from "./normalizePriceData.js";
@@ -129,16 +131,134 @@ export async function getMarketNews(symbol, userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
   const cacheKey = buildCacheKey("news", [normalizedSymbol]);
 
-  const cached = await getOrSetCache(cacheKey, NEWS_TTL, async () => {
-    const key = process.env.ALPHA_VANTAGE_API_KEY;
-    const response = await fetch(
-      `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${normalizedSymbol}&limit=10&apikey=${key}`
-    );
-    const data = await response.json();
-    return data.feed || [];
-  });
+  const cachedValue = getCache(cacheKey);
+  const cacheHit = cachedValue !== null;
+  const cachedFeed = Array.isArray(cachedValue?.feed)
+    ? cachedValue.feed
+    : (Array.isArray(cachedValue) ? cachedValue : []);
 
-  return attachEntityScopeList(cached, userId, tenantId);
+  console.log("[NEWS] Cache hit:", cacheHit);
+  console.log("[NEWS] Cached feed length:", cachedFeed.length);
+
+  if (cacheHit && cachedFeed.length > 0) {
+    return {
+      ...cachedValue,
+      feed: attachEntityScopeList(cachedFeed, userId, tenantId),
+      cacheHit: true,
+    };
+  }
+
+  if (cacheHit && cachedFeed.length === 0) {
+    console.log("[NEWS] Cached feed was empty. Bypassing cache and re-fetching once.");
+  }
+
+  const key = process.env.ALPHA_VANTAGE_API_KEY;
+  const url =
+    `https://www.alphavantage.co/query` +
+    `?function=NEWS_SENTIMENT` +
+    `&tickers=${encodeURIComponent(normalizedSymbol)}` +
+    `&limit=10` +
+    `&apikey=${encodeURIComponent(key || "")}`;
+
+  console.log("[NEWS] Fetching Alpha Vantage NEWS_SENTIMENT for:", normalizedSymbol);
+  console.log("[NEWS] URL:", url);
+
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    console.error("[NEWS] Network error while fetching Alpha Vantage news:", error?.message || error);
+    return {
+      symbol: normalizedSymbol,
+      error: "Failed to reach Alpha Vantage",
+      details: { message: error?.message || String(error) },
+      feed: [],
+      cacheHit: false,
+    };
+  }
+
+  const rawText = await response.text();
+  console.log("[NEWS] Raw response:", rawText);
+
+  let rawResponse;
+  try {
+    rawResponse = rawText ? JSON.parse(rawText) : {};
+  } catch (error) {
+    console.error("[NEWS] Failed to parse Alpha Vantage response:", error?.message || error);
+    return {
+      symbol: normalizedSymbol,
+      error: "Invalid Alpha Vantage response",
+      details: { raw: rawText },
+      feed: [],
+      cacheHit: false,
+    };
+  }
+
+  const responseKeys = rawResponse && typeof rawResponse === "object"
+    ? Object.keys(rawResponse)
+    : [];
+
+  console.log("[NEWS] Raw response keys:", responseKeys);
+  console.log("[NEWS] Contains feed:", Array.isArray(rawResponse?.feed));
+  console.log("[NEWS] Contains items:", rawResponse?.items);
+  console.log("[NEWS] Contains Information:", rawResponse?.Information);
+  console.log("[NEWS] Contains Note:", rawResponse?.Note);
+  console.log("[NEWS] Contains Error Message:", rawResponse?.["Error Message"]);
+
+  if (rawResponse?.Information) {
+    console.error("[NEWS] Alpha Vantage Information response:", rawResponse.Information);
+    return {
+      symbol: normalizedSymbol,
+      error: "Alpha Vantage informational response",
+      details: rawResponse,
+      feed: [],
+      cacheHit: false,
+    };
+  }
+
+  if (rawResponse?.Note) {
+    console.error("[NEWS] Alpha Vantage rate limit note:", rawResponse.Note);
+    return {
+      symbol: normalizedSymbol,
+      error: "Alpha Vantage rate limit hit",
+      details: rawResponse,
+      feed: [],
+      cacheHit: false,
+    };
+  }
+
+  if (rawResponse?.["Error Message"]) {
+    console.error("[NEWS] Alpha Vantage error message:", rawResponse["Error Message"]);
+    return {
+      symbol: normalizedSymbol,
+      error: "Alpha Vantage error",
+      details: rawResponse,
+      feed: [],
+      cacheHit: false,
+    };
+  }
+
+  const parsedFeed = Array.isArray(rawResponse?.feed)
+    ? rawResponse.feed
+        .filter((article) => article && article.title && article.url && article.time_published)
+        .sort((a, b) => new Date(b.time_published) - new Date(a.time_published))
+    : [];
+
+  console.log("[NEWS] Parsed feed length:", parsedFeed.length);
+
+  const result = {
+    symbol: normalizedSymbol,
+    items: rawResponse?.items ?? parsedFeed.length,
+    feed: parsedFeed,
+    cacheHit: false,
+  };
+
+  setCache(cacheKey, result, NEWS_TTL);
+
+  return {
+    ...result,
+    feed: attachEntityScopeList(parsedFeed, userId, tenantId),
+  };
 }
 
 export async function getMarketSnapshot(userId, tenantId = "alpha-dev") {
