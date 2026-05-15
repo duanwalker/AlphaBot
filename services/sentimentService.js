@@ -140,15 +140,46 @@ export function computeVolumeVsAvg(ticker, currentVolume) {
 export async function runSentimentPipeline(ticker) {
   const normalizedTicker = normalizeTicker(ticker);
 
-  const [stocktwitsPosts, redditPosts] = await Promise.all([
-    fetchStockTwitsPosts(normalizedTicker),
-    fetchRedditPosts(normalizedTicker),
-  ]);
-  const allPosts = [...stocktwitsPosts, ...redditPosts];
+  let allPosts = [];
+  console.time("[PIPELINE] fetch_posts");
+  try {
+    const [stocktwitsPosts, redditPosts] = await Promise.all([
+      fetchStockTwitsPosts(normalizedTicker),
+      fetchRedditPosts(normalizedTicker),
+    ]);
+    allPosts = [...stocktwitsPosts, ...redditPosts];
+  } finally {
+    console.timeEnd("[PIPELINE] fetch_posts");
+  }
 
-  const scoredPosts = await scorePosts(allPosts);
+  const limitedPosts = allPosts.slice(0, 12);
+
+  let scoredPosts = [];
+  console.time("[PIPELINE] finbert_scoring");
+  try {
+    scoredPosts = await scorePosts(limitedPosts);
+  } catch (err) {
+    console.error(`[PIPELINE] FinBERT failed for ${normalizedTicker}:`, err?.message || err);
+    scoredPosts = limitedPosts.map((post) => ({
+      ...post,
+      finbertSentiment: "neutral",
+      finbertScore: 0,
+      finbertConfidence: 0,
+    }));
+  } finally {
+    console.timeEnd("[PIPELINE] finbert_scoring");
+  }
+
   const top30Posts = selectTop30(scoredPosts);
-  const agentPayload = await runSentimentAgent(normalizedTicker, top30Posts);
+
+  let agentPayload;
+  console.time("[PIPELINE] claude_agent");
+  try {
+    agentPayload = await runSentimentAgent(normalizedTicker, top30Posts);
+  } finally {
+    console.timeEnd("[PIPELINE] claude_agent");
+  }
+
   const timestamp = new Date().toISOString();
 
   const payload = {
@@ -165,9 +196,14 @@ export async function runSentimentPipeline(ticker) {
     ...payload,
   };
 
-  persistSnapshot(snapshot).catch((err) => {
+  console.time("[PIPELINE] db_write");
+  try {
+    await persistSnapshot(snapshot);
+  } catch (err) {
     console.error(`Sentiment snapshot persist failed for ${normalizedTicker}:`, err.message);
-  });
+  } finally {
+    console.timeEnd("[PIPELINE] db_write");
+  }
 
   return payload;
 }

@@ -37,6 +37,11 @@ import {
   compressOrders,
   compressSnapshot,
 } from "./services/compressionService.js";
+import {
+  getLatestSnapshot,
+  getSnapshotHistory,
+  getWatchList,
+} from "./services/sentimentDb.js";
 
 
 dotenv.config();
@@ -88,6 +93,9 @@ app.post("/api/assistant", async (req, res) => {
       : null;
     let fundamentals = null;
     let history = null;
+    let sentiment = null;
+    let sentimentArticles = null;
+    let watchlistSentiment = null;
 
     console.time("[TIMING] fetch_data");
     try {
@@ -137,6 +145,134 @@ app.post("/api/assistant", async (req, res) => {
           console.error("Assistant fundamentals/history error:", err);
         }
       }
+
+      if (context?.symbol) {
+        const symbol = context.symbol.toUpperCase();
+
+        try {
+          const latestSnapshot = await getLatestSnapshot(symbol);
+          const sentimentHistory = await getSnapshotHistory(symbol, 30);
+
+          if (latestSnapshot) {
+            const trend = {};
+            if (sentimentHistory.length >= 3) {
+              trend.day3 = sentimentHistory[0]?.sentimentScore - sentimentHistory[2]?.sentimentScore;
+            }
+            if (sentimentHistory.length >= 7) {
+              trend.day7 = sentimentHistory[0]?.sentimentScore - sentimentHistory[6]?.sentimentScore;
+            }
+            if (sentimentHistory.length >= 30) {
+              trend.day30 = sentimentHistory[0]?.sentimentScore - sentimentHistory[sentimentHistory.length - 1]?.sentimentScore;
+            }
+            trend.direction =
+              trend.day7 > 0.1
+                ? "up"
+                : trend.day7 < -0.1
+                  ? "down"
+                  : "flat";
+
+            sentiment = {
+              latest: {
+                score: latestSnapshot?.sentimentScore || null,
+                label: latestSnapshot?.sentimentLabel || null,
+                timestamp: latestSnapshot?.timestamp || null,
+                source: latestSnapshot?.source || null,
+              },
+              history: sentimentHistory.slice(0, 30).map((s) => ({
+                timestamp: s?.timestamp || s?.RowKey,
+                score: s?.sentimentScore,
+                label: s?.sentimentLabel,
+              })),
+              trend,
+            };
+          }
+        } catch (err) {
+          console.error("Assistant sentiment error:", err?.message);
+        }
+      }
+
+      if (context?.symbol) {
+        const symbol = context.symbol.toUpperCase();
+
+        try {
+          const newsData = await getMarketNews(symbol, userId, tenantId);
+
+          if (Array.isArray(newsData?.feed) && newsData.feed.length > 0) {
+            const articles = newsData.feed.map((article) => ({
+              title: article?.title || "",
+              url: article?.url || "",
+              source: article?.source || "",
+              time_published: article?.time_published || "",
+              summary: article?.summary || "",
+              overall_sentiment_score: Number(article?.overall_sentiment_score ?? 0),
+              overall_sentiment_label: article?.overall_sentiment_label || "neutral",
+              relevance_score: Number(article?.relevance_score ?? 0),
+              ticker_mentions: article?.ticker_sentiment?.map((t) => ({
+                ticker: t?.ticker,
+                sentiment_score: t?.sentiment_score,
+                sentiment_label: t?.sentiment_label,
+              })) || [],
+            }));
+
+            const positive = articles.filter((a) => a.overall_sentiment_score > 0.2);
+            const negative = articles.filter((a) => a.overall_sentiment_score < -0.2);
+            const neutral = articles.filter(
+              (a) => a.overall_sentiment_score >= -0.2 && a.overall_sentiment_score <= 0.2
+            );
+
+            sentimentArticles = {
+              latest: articles.slice(0, 10),
+              positive: positive.slice(0, 5),
+              negative: negative.slice(0, 5),
+              neutral: neutral.slice(0, 5),
+              drivers: {
+                positive: positive.sort((a, b) => b.overall_sentiment_score - a.overall_sentiment_score).slice(0, 3),
+                negative: negative.sort((a, b) => a.overall_sentiment_score - b.overall_sentiment_score).slice(0, 3),
+              },
+            };
+          }
+        } catch (err) {
+          console.error("Assistant news error:", err?.message);
+        }
+      }
+
+      if (userId) {
+        try {
+          const watchlist = await getWatchList(userId);
+          if (Array.isArray(watchlist) && watchlist.length > 0) {
+            const watchlistSymbols = watchlist.map((w) => w?.ticker || w?.symbol).filter(Boolean).slice(0, 10);
+            const watchlistData = await Promise.all(
+              watchlistSymbols.map(async (sym) => {
+                try {
+                  const snap = await getLatestSnapshot(sym);
+                  return {
+                    symbol: sym,
+                    score: snap?.sentimentScore || null,
+                    label: snap?.sentimentLabel || null,
+                  };
+                } catch {
+                  return { symbol: sym, score: null, label: null };
+                }
+              })
+            );
+
+            const sorted = watchlistData.sort((a, b) => (b.score || 0) - (a.score || 0));
+            watchlistSentiment = {
+              top_positive: sorted
+                .filter((w) => (w.score || 0) > 0.15)
+                .slice(0, 5)
+                .map((w) => ({ symbol: w.symbol, score: w.score, label: w.label })),
+              top_negative: sorted
+                .filter((w) => (w.score || 0) < -0.15)
+                .slice(0, 5)
+                .map((w) => ({ symbol: w.symbol, score: w.score, label: w.label })),
+              total_count: watchlist.length,
+            };
+          }
+        } catch (err) {
+          console.error("Assistant watchlist sentiment error:", err?.message);
+        }
+      }
     } finally {
       console.timeEnd("[TIMING] fetch_data");
     }
@@ -167,6 +303,9 @@ app.post("/api/assistant", async (req, res) => {
         fundamentals: compressedFundamentals,
         history: compressedHistory,
         snapshot: compressedSnapshot,
+        sentiment,
+        sentimentArticles,
+        watchlistSentiment,
         symbol: context.symbol || null,
         userId,
         tenantId,
@@ -195,6 +334,15 @@ ${JSON.stringify(compressed.history, null, 2)}
 
 Compressed Market Snapshot (symbol, bid, ask, last, timestamp):
 ${JSON.stringify(compressed.snapshot, null, 2)}
+
+Sentiment Data (latest score, 30-day history, trend direction, watchlist context):
+${JSON.stringify(compressed.sentiment, null, 2)}
+
+Sentiment Articles (relevant news, sentiment scores, positive/negative drivers):
+${JSON.stringify(compressed.sentimentArticles, null, 2)}
+
+Watchlist Sentiment Context (top positive/negative movers):
+${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     `;
     } finally {
       console.timeEnd("[TIMING] context_payload");
@@ -205,22 +353,51 @@ ${JSON.stringify(compressed.snapshot, null, 2)}
     You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
     Your purpose is to turn the provided compressed portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
     
-    RESEARCH MODE (A2): You will receive COMPRESSED research data to reduce token usage while preserving analytical depth.
+    RESEARCH MODE (A2): You will receive COMPRESSED research data including sentiment, news, and watchlist context.
     Operating assumptions:
     - Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
     - Use ONLY the COMPRESSED information provided. Do NOT assume missing fields—they are intentionally compressed.
     - Do NOT request additional data beyond what's provided.
     - Be decisive when data is sufficient; be transparent when it is not.
+    
+    SENTIMENT DATA:
+    - latest sentiment score and label for the symbol
+    - 30-day sentiment history with trend analysis (3-day, 7-day, 30-day deltas)
+    - trend direction ("up", "down", "flat") based on 7-day change
+    
+    SENTIMENT ARTICLES:
+    - relevant news articles with sentiment scores (-1.0 to +1.0)
+    - articles grouped by sentiment: positive (>0.2), negative (<-0.2), neutral
+    - positive and negative catalyst drivers (top 3 each)
+    - ticker mentions and sentiment labels per article
+    
+    WATCHLIST SENTIMENT:
+    - top positive sentiment movers in your watchlist
+    - top negative sentiment movers in your watchlist
+    - total watchlist count
+    
     Core tasks:
     1) Explain market concepts, mechanics, and strategies (stocks + options).
     2) Analyze current positions using compressed data (compressed fundamentals, compressed history, compressed positions, compressed orders, compressed snapshot).
-    3) Propose trade candidates that fit portfolio constraints and user's stated goals.
-    4) Provide clear rationale, risk analysis, and explicit invalidation criteria.
+    3) Use sentiment data to detect narrative trends and identify catalysts driving price movements.
+    4) Cross-reference sentiment articles with price action to spot divergences or confirmations.
+    5) Propose trade candidates that fit portfolio constraints and user's stated goals.
+    6) Provide clear rationale, risk analysis, and explicit invalidation criteria.
+    
+    SENTIMENT ANALYSIS INSTRUCTIONS:
+    - Use sentiment score to assess market narrative and retail/professional bias
+    - Identify positive catalysts in sentiment articles (news drivers that explain rallies)
+    - Identify negative catalysts in sentiment articles (risks or concerns driving declines)
+    - Detect divergences: strong sentiment but weak price action, or vice versa
+    - Monitor sentiment trends: increasing positive sentiment may signal sustained demand
+    - Note sentiment reversals: sudden negative articles after positive trends suggest inflection points
+    
     When you make recommendations:
     - Provide reasoning in a compact, checkable way.
     - Include at least one alternative path.
     - Tie every suggestion to available buying power, position sizing, and risk controls.
     - Reference only the compressed fields provided (do not invent missing fields).
+    - Integrate sentiment and news findings into your rationale
     Output requirements:
     A) Snapshot (current state analysis)
     B) Primary idea (best opportunity)

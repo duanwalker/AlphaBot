@@ -1,4 +1,4 @@
-import { fetchSentimentSnapshot } from "./sentimentFetcher.js";
+import { runSentimentPipeline } from "./sentimentService.js";
 import * as sentimentDb from "./sentimentDb.js";
 
 // --- Schedule configuration ------------------------------------------------
@@ -92,7 +92,8 @@ async function runScheduledRefresh() {
     console.log("Processing symbol:", symbol);
     console.time(`[SCHEDULER] ${symbol}`);
     try {
-      const snapshot = await fetchSentimentSnapshot(symbol);
+      console.log("[SCHEDULER] Using new sentiment pipeline for:", symbol);
+      const snapshot = await runSentimentPipeline(symbol);
       console.log("SNAPSHOT RESULT:", symbol, snapshot);
       await saveSnapshot(symbol, snapshot);
       console.log("SAVED SNAPSHOT:", symbol);

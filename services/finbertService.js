@@ -2,6 +2,10 @@ import { spawn } from "child_process";
 
 // Python environment requires: pip install transformers torch
 export async function scorePosts(posts) {
+  if (!Array.isArray(posts) || posts.length === 0) {
+    return [];
+  }
+
   return new Promise((resolve, reject) => {
     const pythonCommand = process.platform === "win32" ? "python" : "python3";
     const scriptPath = "scripts/finbert_score.py";
@@ -29,7 +33,8 @@ export async function scorePosts(posts) {
     py.on("close", (code) => {
       if (code !== 0) return reject(new Error(`FinBERT error: ${error}`));
       try {
-        resolve(JSON.parse(output));
+        const parsed = JSON.parse(output);
+        resolve(Array.isArray(parsed) ? parsed : []);
       } catch (e) {
         reject(new Error("FinBERT output parse failed"));
       }
