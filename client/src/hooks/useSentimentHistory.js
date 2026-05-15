@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 
 function normalizeTicker(ticker) {
@@ -19,6 +19,42 @@ export default function useSentimentHistory(ticker, days = 30) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const fetchSentimentHistory = useCallback(async (normalizedTicker, normalizedDays, signal) => {
+    const response = await axios.get(
+      `/api/sentiment/history/${encodeURIComponent(normalizedTicker)}?days=${encodeURIComponent(normalizedDays)}`,
+      { signal }
+    );
+
+    return Array.isArray(response?.data) ? response.data : [];
+  }, []);
+
+  const refetch = useCallback(async () => {
+    const normalizedTicker = normalizeTicker(ticker);
+    const normalizedDays = normalizeDays(days);
+
+    if (!normalizedTicker) {
+      setHistory([]);
+      setLoading(false);
+      setError(null);
+      return [];
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const freshHistory = await fetchSentimentHistory(normalizedTicker, normalizedDays);
+      setHistory(freshHistory);
+      return freshHistory;
+    } catch (err) {
+      setHistory([]);
+      setError(err?.response?.data?.error || err?.message || "Failed to load sentiment history");
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [days, fetchSentimentHistory, ticker]);
+
   useEffect(() => {
     const normalizedTicker = normalizeTicker(ticker);
     const normalizedDays = normalizeDays(days);
@@ -37,14 +73,10 @@ export default function useSentimentHistory(ticker, days = 30) {
       try {
         setLoading(true);
         setError(null);
-
-        const response = await axios.get(
-          `/api/sentiment/history/${encodeURIComponent(normalizedTicker)}?days=${encodeURIComponent(normalizedDays)}`,
-          { signal: controller.signal }
-        );
+        const nextHistory = await fetchSentimentHistory(normalizedTicker, normalizedDays, controller.signal);
 
         if (!isStale) {
-          setHistory(Array.isArray(response?.data) ? response.data : []);
+          setHistory(nextHistory);
         }
       } catch (err) {
         if (controller.signal.aborted || isStale) {
@@ -68,7 +100,7 @@ export default function useSentimentHistory(ticker, days = 30) {
       isStale = true;
       controller.abort();
     };
-  }, [ticker, days]);
+  }, [days, fetchSentimentHistory, ticker]);
 
-  return { history, loading, error };
+  return { history, loading, error, refetch };
 }

@@ -405,22 +405,26 @@ export async function removeFromWatchList(userId, ticker) {
     throw new Error("removeFromWatchList requires userId and ticker");
   }
 
-  const now = new Date().toISOString();
-  const entity = {
-    partitionKey: normalizedUserId,
-    rowKey: normalizedTicker,
-    userId: normalizedUserId,
-    ticker: normalizedTicker,
-    isActive: false,
-    updatedAt: now,
-  };
+  try {
+    await getWatchListTableClient().deleteEntity(normalizedUserId, normalizedTicker);
+    return {
+      userId: normalizedUserId,
+      ticker: normalizedTicker,
+      deleted: true,
+    };
+  } catch (err) {
+    if (Number(err?.statusCode || err?.status) === 404) {
+      const notFoundError = new Error(`Watchlist symbol not found: ${normalizedTicker}`);
+      notFoundError.statusCode = 404;
+      throw notFoundError;
+    }
 
-  await getWatchListTableClient().upsertEntity(entity, "Merge");
-
-  return {
-    userId: normalizedUserId,
-    ticker: normalizedTicker,
-    isActive: false,
-    updatedAt: now,
-  };
+    console.error("[DB ERROR] removeFromWatchList", {
+      userId: normalizedUserId,
+      symbol: normalizedTicker,
+      message: err?.message,
+      stack: err?.stack,
+    });
+    throw err;
+  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { normalizeSentimentSnapshot } from "../utils/sentimentNormalization";
 
@@ -10,6 +10,40 @@ export default function useLatestSentiment(ticker) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const fetchLatestSentiment = useCallback(async (normalizedTicker, signal) => {
+    const response = await axios.get(`/api/sentiment/latest/${encodeURIComponent(normalizedTicker)}`, {
+      signal,
+    });
+
+    return normalizeSentimentSnapshot(response?.data ?? null);
+  }, []);
+
+  const refetch = useCallback(async () => {
+    const normalizedTicker = normalizeTicker(ticker);
+
+    if (!normalizedTicker) {
+      setData(null);
+      setLoading(false);
+      setError(null);
+      return null;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const latest = await fetchLatestSentiment(normalizedTicker);
+      setData(latest);
+      return latest;
+    } catch (err) {
+      setData(null);
+      setError(err?.response?.data?.error || err?.message || "Failed to load latest sentiment");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchLatestSentiment, ticker]);
 
   useEffect(() => {
     const normalizedTicker = normalizeTicker(ticker);
@@ -28,13 +62,10 @@ export default function useLatestSentiment(ticker) {
       try {
         setLoading(true);
         setError(null);
-
-        const response = await axios.get(`/api/sentiment/latest/${encodeURIComponent(normalizedTicker)}`, {
-          signal: controller.signal,
-        });
+        const latest = await fetchLatestSentiment(normalizedTicker, controller.signal);
 
         if (!isStale) {
-          setData(normalizeSentimentSnapshot(response?.data ?? null));
+          setData(latest);
         }
       } catch (err) {
         if (controller.signal.aborted || isStale) {
@@ -58,7 +89,7 @@ export default function useLatestSentiment(ticker) {
       isStale = true;
       controller.abort();
     };
-  }, [ticker]);
+  }, [fetchLatestSentiment, ticker]);
 
-  return { data, loading, error };
+  return { data, loading, error, refetch };
 }

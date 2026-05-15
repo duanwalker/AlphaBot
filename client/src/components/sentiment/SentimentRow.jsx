@@ -1,7 +1,9 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import useLatestSentiment from "../../hooks/useLatestSentiment";
 import { isSnapshotStale } from "../../utils/sentimentSchedule";
 import SentimentArrow from "./SentimentArrow";
+import { addToWatchlist, getWatchlist, removeFromWatchlist } from "../../services/watchlistApi";
+import useToast from "../../hooks/useToast";
 
 const BULLISH_THRESHOLD = 0.15;
 const BEARISH_THRESHOLD = -0.15;
@@ -79,11 +81,128 @@ function MiniSentimentBar({ score }) {
 
 function SentimentRow({ symbol, selected, onSelect }) {
   const { data: snapshot } = useLatestSentiment(symbol);
+  const [removing, setRemoving] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [fade, setFade] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const [isInWatchlist, setIsInWatchlist] = useState(true);
+  const { toast, toastWithAction } = useToast();
 
   const score = useMemo(() => readSentimentScore(snapshot), [snapshot]);
   const label = useMemo(() => getSentimentLabel(score), [score]);
   const stale = useMemo(() => isSnapshotStale(snapshot), [snapshot]);
   const updatedLabel = formatUpdated(snapshot?.timestamp);
+
+  useEffect(() => {
+    let staleRequest = false;
+
+    async function refreshLocalWatchlistState() {
+      try {
+        const watchlist = await getWatchlist();
+        if (staleRequest) {
+          return;
+        }
+
+        const exists = watchlist.some((entry) => {
+          const ticker = String(entry?.ticker || entry?.symbol || entry?.rowKey || "").trim().toUpperCase();
+          return ticker === symbol;
+        });
+
+        setIsInWatchlist(exists);
+      } catch {
+        // Keep current UI state if watchlist refresh fails.
+      }
+    }
+
+    refreshLocalWatchlistState();
+
+    return () => {
+      staleRequest = true;
+    };
+  }, [symbol]);
+
+  async function dispatchWatchlistUpdated() {
+    const watchlist = await getWatchlist();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("watchlist:updated", { detail: { watchlist } }));
+    }
+
+    const exists = watchlist.some((entry) => {
+      const ticker = String(entry?.ticker || entry?.symbol || entry?.rowKey || "").trim().toUpperCase();
+      return ticker === symbol;
+    });
+
+    setIsInWatchlist(exists);
+    return watchlist;
+  }
+
+  async function undoRemove(targetSymbol) {
+    try {
+      await addToWatchlist(targetSymbol);
+      await dispatchWatchlistUpdated();
+      setRemoved(false);
+      setFade(false);
+      toast.success(`Added ${targetSymbol} to watchlist`);
+    } catch {
+      toast.error("Failed to update watchlist");
+    }
+  }
+
+  async function handleRemove(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (removing) {
+      return;
+    }
+
+    try {
+      setRemoving(true);
+      await removeFromWatchlist(symbol);
+
+      if (selected) {
+        onSelect("");
+      }
+
+      await dispatchWatchlistUpdated();
+      setFade(true);
+      window.setTimeout(() => {
+        setRemoved(true);
+      }, 250);
+      toastWithAction(`Removed ${symbol} from watchlist`, "Undo", () => undoRemove(symbol));
+    } catch {
+      toast.error("Failed to update watchlist");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  async function handleAdd(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (adding) {
+      return;
+    }
+
+    try {
+      setAdding(true);
+      await addToWatchlist(symbol);
+      await dispatchWatchlistUpdated();
+      setRemoved(false);
+      setFade(false);
+      toast.success(`Added ${symbol} to watchlist`);
+    } catch {
+      toast.error("Failed to update watchlist");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  if (removed) {
+    return null;
+  }
 
   return (
     <>
@@ -105,9 +224,14 @@ function SentimentRow({ symbol, selected, onSelect }) {
           cursor: "pointer",
           textAlign: "left",
           transition: "background 220ms ease, border-color 220ms ease",
+          opacity: fade ? 0 : 1,
+          willChange: "opacity",
+          transitionProperty: "background, border-color, opacity",
+          transitionDuration: "220ms, 220ms, 250ms",
+          transitionTimingFunction: "ease, ease, ease",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 68px 74px 24px", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 68px 74px 24px auto", gap: 10, alignItems: "center" }}>
           <div style={{ fontWeight: 700, letterSpacing: "0.04em" }}>{symbol}</div>
 
           <MiniSentimentBar score={score} />
@@ -120,6 +244,80 @@ function SentimentRow({ symbol, selected, onSelect }) {
 
           <div style={{ fontSize: 16, textAlign: "center" }}>
             <SentimentArrow score={score} />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+            {!isInWatchlist && (
+              <button
+                type="button"
+                aria-label={`Add ${symbol} to watchlist`}
+                title={`Add ${symbol} to watchlist`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={handleAdd}
+                disabled={adding}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  border: "1px solid rgba(74,222,128,0.5)",
+                  background: adding ? "rgba(74,222,128,0.2)" : "rgba(74,222,128,0.12)",
+                  color: "#bbf7d0",
+                  fontSize: 14,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: adding ? "default" : "pointer",
+                  transition: "background 160ms ease, border-color 160ms ease",
+                }}
+              >
+                ＋
+              </button>
+            )}
+
+            {isInWatchlist && (
+              <button
+                type="button"
+                aria-label={`Remove ${symbol} from watchlist`}
+                title={`Remove ${symbol} from watchlist`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={handleRemove}
+                disabled={removing}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  border: "1px solid rgba(248,113,113,0.5)",
+                  background: removing ? "rgba(248,113,113,0.2)" : "rgba(248,113,113,0.1)",
+                  color: "#fecaca",
+                  fontSize: 13,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: removing ? "default" : "pointer",
+                  transition: "background 160ms ease, border-color 160ms ease",
+                }}
+                onMouseEnter={(event) => {
+                  if (!removing) {
+                    event.currentTarget.style.background = "rgba(248,113,113,0.24)";
+                  }
+                }}
+                onMouseLeave={(event) => {
+                  if (!removing) {
+                    event.currentTarget.style.background = "rgba(248,113,113,0.1)";
+                  }
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 

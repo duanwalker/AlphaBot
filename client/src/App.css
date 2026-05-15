@@ -340,6 +340,41 @@ body::before {
   transition: background 0.2s ease;
 }
 
+.qa-btn--watchlist {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #bbf7d0;
+}
+
+.qa-btn--watchlist:hover {
+  background: rgba(74, 222, 128, 0.25);
+}
+
+.qa-btn--watchlist:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sentiment-refresh-btn {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 150ms ease;
+}
+
+.sentiment-refresh-btn:hover {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.sentiment-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ====== SETTINGS ====== */
 
 .settings-page {

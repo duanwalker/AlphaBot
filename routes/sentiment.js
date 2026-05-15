@@ -131,6 +131,16 @@ router.delete("/watchlist/:symbol", async (req, res) => {
 
     return res.json({ success: true, symbol });
   } catch (err) {
+    const statusCode = Number(err?.statusCode || err?.status || 500);
+
+    if (statusCode === 404) {
+      console.error("Sentiment watchlist remove not found:", err?.message);
+      return res.status(404).json({
+        error: "Watchlist symbol not found",
+        symbol: normalizeSymbol(req.params.symbol),
+      });
+    }
+
     console.error("Sentiment watchlist remove error:", err);
     return res.status(500).json({
       error: "Failed to remove symbol from watchlist",

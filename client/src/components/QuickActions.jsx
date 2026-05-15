@@ -1,12 +1,16 @@
 import { useState } from "react";
 import useSymbolSearch from "../hooks/useSymbolSearch";
 import { useEffect } from "react";
+import useToast from "../hooks/useToast";
+import { addToWatchlist, getWatchlist } from "../services/watchlistApi";
 
 
 export default function QuickActions({ onSymbolSelected }) {
   const [input, setInput] = useState("");
   const { loading, error, result, searchSymbol } = useSymbolSearch();
   const [fundamentals, setFundamentals] = useState(null);
+  const { toast } = useToast();
+  const [adding, setAdding] = useState(false);
 
    useEffect(() => {
     if (result && onSymbolSelected) {
@@ -34,6 +38,23 @@ export default function QuickActions({ onSymbolSelected }) {
     const trimmed = input.trim();
     if (trimmed) searchSymbol(trimmed);
   };
+
+  async function handleAddToWatchlist() {
+    const symbol = input.trim();
+    if (!symbol) return;
+    try {
+      setAdding(true);
+      await addToWatchlist(symbol);
+      const watchlist = await getWatchlist();
+      window.dispatchEvent(new CustomEvent("watchlist:updated", { detail: { watchlist } }));
+      toast.success(`${symbol} added to watchlist`);
+    } catch (err) {
+      console.error("Watchlist error:", err);
+      toast.error("Failed to add to watchlist");
+    } finally {
+      setAdding(false);
+    }
+  }
 
   return (
     <>
@@ -99,6 +120,15 @@ export default function QuickActions({ onSymbolSelected }) {
 
           <button className="btn" onClick={handleSearch}>
             Refresh
+          </button>
+
+          <button
+            type="button"
+            className="qa-btn qa-btn--watchlist"
+            onClick={handleAddToWatchlist}
+            disabled={!input.trim() || adding}
+          >
+            {adding ? "Adding..." : "Add to Watchlist"}
           </button>
         </div>
       </div>
