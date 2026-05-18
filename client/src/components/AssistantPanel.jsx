@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
 
 export default function AssistantPanel({
   open,
@@ -32,7 +31,9 @@ export default function AssistantPanel({
   setLoading(true);
 
   try {
-    const res = await axios.post("http://localhost:3001/api/assistant", {
+    setMessages((prev) => [...prev, { from: "assistant", text: "" }]);
+
+    const payload = {
       message: userMsg.text,
       context: {
         account,
@@ -41,10 +42,44 @@ export default function AssistantPanel({
         marketSnapshot,
         symbol: symbol || null
       },
+    };
+
+    const response = await fetch("http://localhost:3001/api/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
 
-    const assistantMsg = { from: "assistant", text: res.data.reply };
-    setMessages((prev) => [...prev, assistantMsg]);
+    if (!response.ok || !response.body) {
+      throw new Error("Assistant request failed");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let fullText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+
+      setMessages((prev) => {
+        if (!prev.length) return prev;
+        const next = [...prev];
+        const lastIndex = next.length - 1;
+        if (next[lastIndex].from !== "assistant") {
+          next.push({ from: "assistant", text: chunk });
+          return next;
+        }
+        next[lastIndex] = {
+          ...next[lastIndex],
+          text: next[lastIndex].text + chunk,
+        };
+        return next;
+      });
+    }
   } catch (err) {
     setMessages((prev) => [
       ...prev,

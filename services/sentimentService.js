@@ -87,8 +87,10 @@ function normalizeAgentPayload(raw = {}) {
 }
 
 export async function runSentimentAgent(ticker, top30Posts) {
-  const response = await anthropic.messages.create({
-    model: "claude-3-5-haiku-latest",
+  const primaryModel = "claude-3-haiku-20240307";
+  const fallbackModel = "claude-3-sonnet-20240229";
+
+  const requestPayload = {
     max_tokens: 1200,
     temperature: 0.2,
     system: `You are a market sentiment analyst for AlphaBot. Analyze the supplied social posts for a single ticker and return only valid JSON.
@@ -126,7 +128,26 @@ Rules:
         ],
       },
     ],
-  });
+  };
+
+  let response;
+  console.log(`[AGENT] Trying primary model: ${primaryModel}`);
+  try {
+    response = await anthropic.messages.create({
+      model: primaryModel,
+      ...requestPayload,
+    });
+  } catch (err) {
+    console.warn(
+      `[AGENT] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Error:`,
+      err?.message
+    );
+    console.log(`[AGENT] Trying fallback model: ${fallbackModel}`);
+    response = await anthropic.messages.create({
+      model: fallbackModel,
+      ...requestPayload,
+    });
+  }
 
   const text = response.content?.[0]?.text || "{}";
   const parsed = JSON.parse(extractJsonObject(text));

@@ -405,10 +405,10 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     D) Questions needed (if data gaps exist)
     `;
 
-    let completion;
+    let finalMessage;
     console.time("[TIMING] claude_call");
     try {
-      completion = await anthropic.messages.create({
+      const stream = anthropic.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
         temperature: 0.3,
@@ -423,16 +423,36 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
           }
         ]
       });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      let fullText = "";
+      console.time("[TIMING] response_send");
+      try {
+        for await (const chunk of stream) {
+          const token = chunk?.delta?.text;
+          if (token) {
+            fullText += token;
+            res.write(token);
+          }
+        }
+        const final = await stream.finalMessage();
+        console.log("Final message:", final);
+        finalMessage = final;
+        res.end();
+      } finally {
+        console.timeEnd("[TIMING] response_send");
+      }
     } finally {
       console.timeEnd("[TIMING] claude_call");
     }
 
-    const reply = completion.content?.[0]?.text || "No response generated.";
-
     // ─── Usage Metering (B1 Logging Only) ──────────────────────────────
     console.time("[TIMING] usage_metering");
     try {
-      const usage = completion?.usage || {};
+      const usage = finalMessage?.usage || {};
       const inputTokens = usage.input_tokens || 0;
       const outputTokens = usage.output_tokens || 0;
       const totalTokens = inputTokens + outputTokens;
@@ -458,16 +478,13 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
       console.timeEnd("[TIMING] usage_metering");
     }
 
-    console.time("[TIMING] response_send");
-    try {
-      res.json({ reply });
-    } finally {
-      console.timeEnd("[TIMING] response_send");
-    }
-
   } catch (err) {
     console.error("Assistant error:", err);
-    res.status(500).json({ error: "Assistant failed" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Assistant failed" });
+    } else {
+      res.end();
+    }
   } finally {
     console.timeEnd("[TIMING] assistant_total");
   }
