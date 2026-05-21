@@ -87,8 +87,8 @@ function normalizeAgentPayload(raw = {}) {
 }
 
 export async function runSentimentAgent(ticker, top30Posts) {
-  const primaryModel = "claude-3-haiku-20240307";
-  const fallbackModel = "claude-3-sonnet-20240229";
+  const primaryModel = "claude-haiku-4-5-20251001";
+  const fallbackModel = "claude-sonnet-4-6";
 
   const requestPayload = {
     max_tokens: 1200,

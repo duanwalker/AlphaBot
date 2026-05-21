@@ -348,6 +348,36 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
       console.timeEnd("[TIMING] context_payload");
     }
 
+    let articles = [];
+    const ticker = context?.symbol ? String(context.symbol).trim().toUpperCase() : null;
+    if (ticker) {
+      try {
+        const newsResponse = await fetch(`http://localhost:3001/api/market/news/${encodeURIComponent(ticker)}`);
+        const newsJson = await newsResponse.json();
+        articles = newsJson?.articles?.slice(0, 5)
+          || (Array.isArray(newsJson?.feed) ? newsJson.feed.slice(0, 5) : []);
+      } catch (err) {
+        console.error("Assistant news fetch failed:", err);
+      }
+    }
+
+    const compressedArticles = articles.map((a) => ({
+      title: a?.title,
+      summary: a?.summary?.slice(0, 300) || "",
+      url: a?.url,
+      publishedAt: a?.time_published || a?.publishedAt || null,
+      source: a?.source || null,
+    }));
+
+    const payload = {
+      userQuery: req.body?.query || message,
+      ticker,
+      fundamentals: compressedFundamentals,
+      sentiment,
+      watchlistContext: watchlistSentiment,
+      articles: compressedArticles,
+    };
+
 
     const systemPrompt = `
     You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
@@ -398,6 +428,15 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     - Tie every suggestion to available buying power, position sizing, and risk controls.
     - Reference only the compressed fields provided (do not invent missing fields).
     - Integrate sentiment and news findings into your rationale
+
+    When "articles" are provided:
+    - Identify bullish and bearish catalysts
+    - Extract key themes and drivers
+    - Connect news to fundamentals, sentiment, and price action
+    - Highlight risks and opportunities
+    - Reference articles by title only
+    - Do NOT hallucinate missing articles
+
     Output requirements:
     A) Snapshot (current state analysis)
     B) Primary idea (best opportunity)
@@ -405,11 +444,17 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     D) Questions needed (if data gaps exist)
     `;
 
+    const primaryModel = "claude-haiku-4-5-20251001";
+    const fallbackModel = "claude-sonnet-4-6";
     let finalMessage;
+    let usedModel = primaryModel;
     console.time("[TIMING] claude_call");
     try {
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-6",
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const streamParams = {
         max_tokens: 1500,
         temperature: 0.3,
         system: systemPrompt,
@@ -417,20 +462,20 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
           {
             role: "user",
             content: [
-              { type: "text", text: userContext },
+              { type: "text", text: JSON.stringify(payload, null, 2) },
               { type: "text", text: `User message: ${message}` }
             ]
           }
         ]
-      });
+      };
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
+      async function streamWithModel(model) {
+        const stream = anthropic.messages.stream({
+          model,
+          ...streamParams,
+        });
 
-      let fullText = "";
-      console.time("[TIMING] response_send");
-      try {
+        let fullText = "";
         for await (const chunk of stream) {
           const token = chunk?.delta?.text;
           if (token) {
@@ -438,9 +483,33 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
             res.write(token);
           }
         }
+
         const final = await stream.finalMessage();
         console.log("Final message:", final);
-        finalMessage = final;
+        return final;
+      }
+
+      let fullText = "";
+      console.time("[TIMING] response_send");
+      try {
+        try {
+          finalMessage = await streamWithModel(primaryModel);
+        } catch (err) {
+          const statusCode = Number(err?.status || err?.statusCode || 0);
+          const errorType = String(err?.error?.type || err?.type || "").toLowerCase();
+          const canFallback = statusCode === 404 || errorType === "not_found_error";
+
+          if (!canFallback) {
+            throw err;
+          }
+
+          console.warn(
+            `[ASSISTANT] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Error:`,
+            err?.message || err
+          );
+          usedModel = fallbackModel;
+          finalMessage = await streamWithModel(fallbackModel);
+        }
         res.end();
       } finally {
         console.timeEnd("[TIMING] response_send");
@@ -465,7 +534,7 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
       const usageEvent = {
         timestamp: new Date().toISOString(),
         userId,
-        model: "claude-sonnet-4-6",
+        model: usedModel,
         symbol: context.symbol || null,
         inputTokens,
         outputTokens,
