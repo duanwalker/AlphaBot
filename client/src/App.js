@@ -10,116 +10,129 @@ import ApiKeys from "./pages/Settings/ApiKeys";
 import Preferences from "./pages/Settings/Preferences";
 import About from "./pages/Settings/About";
 import Research from "./pages/Research";
-
-// ⭐ You forgot this import — this is why your pages weren't rendering
 import Dashboard from "./pages/Dashboard";
 
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 
-function App() {
-  const { account, positions, orders, loading, error } = useAlpaca();
+const TABS = ['overview', 'assistant', 'research', 'sentiment', 'options', 'portfolio'];
 
-  const [showAssistant, setShowAssistant] = useState(false);
+const TAB_LABELS = {
+  overview:  'Overview',
+  assistant: 'Assistant',
+  research:  'Research',
+  sentiment: 'Sentiment',
+  options:   'Options',
+  portfolio: 'Portfolio',
+};
+
+function AppShell({ initialTab = 'overview' }) {
+  const { account, positions, orders, loading, error } = useAlpaca();
+  const [activeTab, setActiveTab]       = useState(initialTab);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
   const [activeSymbol, setActiveSymbol] = useState(null);
 
+  const handleTabClick = (tab) => setActiveTab(tab);
+
   return (
-    <Router>
-      <div className="app-root">
+    <div className="app-root">
+      <nav className="topnav">
+        <div className="nav-left">
+          <div className="logo">AlphaBot</div>
+        </div>
 
-        {/* Top Navigation */}
-        <nav className="topnav">
-          <div className="nav-left">
-            <div className="logo">AlphaBot</div>
-          </div>
-
-          <div className="nav-center">
-            <Link className="nav-item" to="/">Dashboard</Link>
-            <Link className="nav-item" to="/research">Research</Link>
-            <Link className="nav-item" to="/orders">Orders</Link>
-            <Link className="nav-item" to="/positions">Positions</Link>
-
-            <span
-              className="nav-item"
-              onClick={() => setShowAssistant(true)}
-              style={{ cursor: "pointer" }}
+        <div className="tab-nav" role="tablist">
+          {TABS.map(tab => (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={`tab-btn${activeTab === tab ? ' active' : ''}`}
+              onClick={() => handleTabClick(tab)}
             >
-              AI Assistant
-            </span>
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
 
-            <Link className="nav-item" to="/settings">Settings</Link>
+          <Link className="tab-settings-link" to="/settings" aria-label="Settings">
+            Settings
+          </Link>
+        </div>
+
+        <div className="nav-right">
+          <div className="user-pill">duan</div>
+        </div>
+      </nav>
+
+      <main className="main">
+        {activeTab === 'overview' && (
+          <Dashboard
+            account={account}
+            positions={positions}
+            orders={orders}
+            error={error}
+            loading={loading}
+            marketSnapshot={marketSnapshot}
+            setMarketSnapshot={setMarketSnapshot}
+            setActiveSymbol={setActiveSymbol}
+            activeSymbol={activeSymbol}
+          />
+        )}
+
+        {activeTab === 'assistant' && (
+          <AssistantPanel
+            inline
+            open
+            account={account}
+            positions={positions}
+            orders={orders}
+            marketSnapshot={marketSnapshot}
+            symbol={activeSymbol}
+          />
+        )}
+
+        {activeTab === 'research' && <Research />}
+
+        {activeTab === 'sentiment' && (
+          <div className="tab-placeholder">
+            <p>Sentiment — coming soon.</p>
           </div>
+        )}
 
-          <div className="nav-right">
-            <div className="user-pill">duan</div>
+        {activeTab === 'options' && (
+          <div className="tab-placeholder">
+            <p>Options — coming soon.</p>
           </div>
-        </nav>
+        )}
 
-        <main className="main">
-          <Routes>
+        {activeTab === 'portfolio' && (
+          <div className="tab-placeholder">
+            <p>Portfolio — coming soon.</p>
+          </div>
+        )}
+      </main>
 
-            {/* DASHBOARD PAGE */}
-            <Route
-              path="/"
-              element={
-                <Dashboard
-                account={account}
-                positions={positions}
-                orders={orders}
-                error={error}
-                loading={loading}
-                marketSnapshot={marketSnapshot}
-                setMarketSnapshot={setMarketSnapshot}
-                setActiveSymbol={setActiveSymbol}
-                activeSymbol={activeSymbol}
-              />
-              }
-            />
-
-            {/* RESEARCH PAGE */}
-            <Route
-              path="/research"
-              element={<Research />}
-            />
-
-            {/* ORDERS PAGE */}
-            <Route
-              path="/orders"
-              element={<h1>Orders (placeholder)</h1>}
-            />
-
-            {/* POSITIONS PAGE */}
-            <Route
-              path="/positions"
-              element={<h1>Positions (placeholder)</h1>}
-            />
-
-            {/* SETTINGS PAGE */}
-            <Route path="/settings" element={<SettingsLayout />}>
-              <Route index element={<Profile />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="billing" element={<BillingUsage />} />
-              <Route path="api-keys" element={<ApiKeys />} />
-              <Route path="preferences" element={<Preferences />} />
-              <Route path="about" element={<About />} />
-            </Route>
-
-          </Routes>
-        </main>
-
-        {/* Assistant Panel */}
-        <AssistantPanel
-          open={showAssistant}
-          onClose={() => setShowAssistant(false)}
-          account={account}
-          positions={positions}
-          orders={orders}
-          marketSnapshot={marketSnapshot}
-          symbol={activeSymbol}
-        />
-      </div>
-    </Router>
+    </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<AppShell initialTab="overview" />} />
+        <Route path="/research" element={<AppShell initialTab="research" />} />
+        <Route path="/orders" element={<AppShell initialTab="portfolio" />} />
+        <Route path="/positions" element={<AppShell initialTab="portfolio" />} />
+        <Route path="/settings" element={<SettingsLayout />}>
+          <Route index          element={<Profile />} />
+          <Route path="profile"     element={<Profile />} />
+          <Route path="billing"     element={<BillingUsage />} />
+          <Route path="api-keys"    element={<ApiKeys />} />
+          <Route path="preferences" element={<Preferences />} />
+          <Route path="about"       element={<About />} />
+        </Route>
+        <Route path="*" element={<AppShell />} />
+      </Routes>
+    </Router>
+  );
+}

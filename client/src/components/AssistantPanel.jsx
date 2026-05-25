@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 export default function AssistantPanel({
   open,
   onClose,
+  inline = false,
   account,
   positions,
   orders,
@@ -20,7 +21,7 @@ export default function AssistantPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (!open) return null;
+  if (!inline && !open) return null;
 
   async function sendMessage() {
   if (!input.trim()) return;
@@ -56,14 +57,11 @@ export default function AssistantPanel({
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
-    let fullText = "";
-
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
-      fullText += chunk;
 
       setMessages((prev) => {
         if (!prev.length) return prev;
@@ -105,12 +103,17 @@ export default function AssistantPanel({
     setInput("");         // clears the input box
   };
 
+  const containerClass = inline ? "assistant-inline" : "assistant-overlay";
+  const panelClass = inline ? "assistant-panel assistant-panel-inline" : "assistant-panel";
+
   return (
-    <div className="assistant-overlay">
-      <div className="assistant-panel">
+    <div className={containerClass}>
+      <div className={panelClass}>
         <div className="assistant-header">
           <span>AI Assistant</span>
-          <button className="assistant-close" onClick={onClose}>×</button>
+          {!inline && (
+            <button className="assistant-close" onClick={onClose}>×</button>
+          )}
         </div>
 
         <div className="assistant-messages">

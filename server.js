@@ -46,6 +46,15 @@ import {
 
 dotenv.config();
 
+const PEER_MAP = {
+  NVDA: ["AMD", "INTC", "QCOM", "AVGO"],
+  MSFT: ["AAPL", "GOOG", "AMZN", "META"],
+  AAPL: ["MSFT", "GOOG", "AMZN", "META"],
+  AMZN: ["GOOG", "META", "MSFT", "AAPL"],
+  TSLA: ["GM", "F", "RIVN", "LCID"],
+  // Add more as needed
+};
+
 // ─────────────────────────────────────────────────────────────
 // App Setup
 // ─────────────────────────────────────────────────────────────
@@ -286,11 +295,11 @@ app.post("/api/assistant", async (req, res) => {
     const compressedSnapshot = compressSnapshot(marketSnapshot);
     console.timeEnd("[TIMING] compression");
 
-    let userContext;
+    let compressed;
     console.time("[TIMING] context_payload");
     try {
       // Build compressed research-friendly payload
-      const compressed = {
+      compressed = {
         account: account ? {
           buyingPower: account.buyingPower || null,
           cash: account.cash || null,
@@ -313,49 +322,376 @@ app.post("/api/assistant", async (req, res) => {
 
       console.log("\n=== /api/assistant compressed context (Research Mode A2) ===");
       console.log(JSON.stringify(compressed, null, 2));
-
-      userContext = `
-You will receive compressed research data for the symbol in JSON format.
-
-Compressed Account Data:
-${JSON.stringify(compressed.account, null, 2)}
-
-Compressed Positions (symbol, qty, avgEntryPrice, currentPrice, unrealizedPL, unrealizedPLPercent):
-${JSON.stringify(compressed.positions, null, 2)}
-
-Compressed Orders (symbol, side, qty, status, filledAvgPrice):
-${JSON.stringify(compressed.orders, null, 2)}
-
-Compressed Fundamentals (symbol, marketCap, peRatio, pegRatio, eps, revenueTTM, profitMargin, dividendYield, beta, fiftyTwoWeekHigh, fiftyTwoWeekLow, sector, industry):
-${JSON.stringify(compressed.fundamentals, null, 2)}
-
-Compressed History (oneYearChangePercent, oneYearVolatility, oneYearHigh, oneYearLow, trendSummary, sparkline):
-${JSON.stringify(compressed.history, null, 2)}
-
-Compressed Market Snapshot (symbol, bid, ask, last, timestamp):
-${JSON.stringify(compressed.snapshot, null, 2)}
-
-Sentiment Data (latest score, 30-day history, trend direction, watchlist context):
-${JSON.stringify(compressed.sentiment, null, 2)}
-
-Sentiment Articles (relevant news, sentiment scores, positive/negative drivers):
-${JSON.stringify(compressed.sentimentArticles, null, 2)}
-
-Watchlist Sentiment Context (top positive/negative movers):
-${JSON.stringify(compressed.watchlistSentiment, null, 2)}
-    `;
     } finally {
       console.timeEnd("[TIMING] context_payload");
     }
 
-    let articles = [];
-    const ticker = context?.symbol ? String(context.symbol).trim().toUpperCase() : null;
-    if (ticker) {
+    // Support both frontend formats: { query: "..."} and { message: "..." }
+    const query =
+      (typeof req.body?.query === "string" && req.body.query.trim().length > 0)
+        ? req.body.query
+        : (typeof req.body?.message === "string" && req.body.message.trim().length > 0)
+            ? req.body.message
+            : "";
+    const explicitTicker = req.body?.ticker || null;
+
+    // Extract ALL 1-5 letter words
+    const matches = [...query.matchAll(/\b[a-zA-Z]{1,5}\b/g)];
+
+    // Normalize to uppercase
+    const allCandidates = matches.map(m => m[0].toUpperCase());
+
+    // Filter out common English words
+    const COMMON_WORDS = new Set([
+      "AND", "THE", "FOR", "ARE", "BUT", "WITH", "THIS", "THAT",
+      "FROM", "WHAT", "ABOUT", "YOUR", "THOUGHTS", "DO", "YOU", "THINK"
+    ]);
+
+    const filtered = allCandidates.filter(w => !COMMON_WORDS.has(w));
+
+    // Choose the LAST remaining candidate (most likely to be the ticker)
+    const inferredTicker = filtered.length > 0 ? filtered[filtered.length - 1] : null;
+
+    const effectiveTicker = explicitTicker || inferredTicker;
+    const userQuery = query;
+    const isMarketMode =
+      !effectiveTicker &&
+      typeof userQuery === "string" &&
+      userQuery.trim().length > 0;
+
+    // Auto-fetch fundamentals for effectiveTicker
+    let autoFundamentals = null;
+    if (effectiveTicker) {
       try {
-        const newsResponse = await fetch(`http://localhost:3001/api/market/news/${encodeURIComponent(ticker)}`);
+        autoFundamentals = await getFundamentals(
+          effectiveTicker,
+          userId,
+          tenantId
+        );
+      } catch (err) {
+        console.error("Assistant fundamentals auto-fetch failed:", err);
+      }
+    }
+
+    const compressedAutoFundamentals = compressFundamentals(autoFundamentals);
+
+    // Auto-fetch sentiment for effectiveTicker
+    let autoSentiment = null;
+
+    if (effectiveTicker) {
+      try {
+        const latestSnapshot = await getLatestSnapshot(effectiveTicker);
+        const sentimentHistory = await getSnapshotHistory(effectiveTicker, 30);
+
+        if (latestSnapshot) {
+          const trend = {};
+
+          if (sentimentHistory.length >= 3) {
+            trend.day3 =
+              sentimentHistory[0].sentimentScore -
+              sentimentHistory[2].sentimentScore;
+          }
+          if (sentimentHistory.length >= 7) {
+            trend.day7 =
+              sentimentHistory[0].sentimentScore -
+              sentimentHistory[6].sentimentScore;
+          }
+          if (sentimentHistory.length >= 30) {
+            trend.day30 =
+              sentimentHistory[0].sentimentScore -
+              sentimentHistory[sentimentHistory.length - 1].sentimentScore;
+          }
+
+          trend.direction =
+            trend.day7 > 0.1
+              ? "up"
+              : trend.day7 < -0.1
+              ? "down"
+              : "flat";
+
+          autoSentiment = {
+            latest: {
+              score: latestSnapshot.sentimentScore,
+              label: latestSnapshot.sentimentLabel,
+              timestamp: latestSnapshot.timestamp,
+              source: latestSnapshot.source,
+            },
+            history: sentimentHistory.map((s) => ({
+              timestamp: s.timestamp || s.RowKey,
+              score: s.sentimentScore,
+              label: s.sentimentLabel,
+            })),
+            trend,
+          };
+        }
+      } catch (err) {
+        console.error("Assistant sentiment auto-fetch failed:", err);
+      }
+    }
+
+    // Auto-fetch sentiment-classified articles
+    let autoSentimentArticles = null;
+
+    if (effectiveTicker) {
+      try {
+        const newsData = await getMarketNews(effectiveTicker, userId, tenantId);
+
+        if (Array.isArray(newsData?.feed) && newsData.feed.length > 0) {
+          const articles = newsData.feed.map((article) => ({
+            title: article.title || "",
+            url: article.url || "",
+            source: article.source || "",
+            time_published: article.time_published || "",
+            summary: article.summary || "",
+            overall_sentiment_score: Number(article.overall_sentiment_score ?? 0),
+            overall_sentiment_label: article.overall_sentiment_label || "neutral",
+            relevance_score: Number(article.relevance_score ?? 0),
+            ticker_mentions:
+              article.ticker_sentiment?.map((t) => ({
+                ticker: t.ticker,
+                sentiment_score: t.sentiment_score,
+                sentiment_label: t.sentiment_label,
+              })) || [],
+          }));
+
+          const positive = articles.filter((a) => a.overall_sentiment_score > 0.2);
+          const negative = articles.filter((a) => a.overall_sentiment_score < -0.2);
+          const neutral = articles.filter(
+            (a) =>
+              a.overall_sentiment_score >= -0.2 &&
+              a.overall_sentiment_score <= 0.2
+          );
+
+          autoSentimentArticles = {
+            latest: articles.slice(0, 10),
+            positive: positive.slice(0, 5),
+            negative: negative.slice(0, 5),
+            neutral: neutral.slice(0, 5),
+            drivers: {
+              positive: positive
+                .sort(
+                  (a, b) =>
+                    b.overall_sentiment_score - a.overall_sentiment_score
+                )
+                .slice(0, 3),
+              negative: negative
+                .sort(
+                  (a, b) =>
+                    a.overall_sentiment_score - b.overall_sentiment_score
+                )
+                .slice(0, 3),
+            },
+          };
+        }
+      } catch (err) {
+        console.error("Assistant sentiment-articles auto-fetch failed:", err);
+      }
+    }
+
+    // Auto-fetch price history for effectiveTicker
+    let autoHistory = null;
+
+    if (effectiveTicker) {
+      try {
+        const rawHistory = await getHistorical(
+          effectiveTicker,
+          "3mo",
+          userId,
+          tenantId
+        );
+
+        if (Array.isArray(rawHistory?.candles) && rawHistory.candles.length > 0) {
+          autoHistory = rawHistory.candles.map((h) => ({
+            date: h.date,
+            open: h.open,
+            high: h.high,
+            low: h.low,
+            close: h.close,
+            volume: h.volume,
+          }));
+        }
+      } catch (err) {
+        console.error("Assistant history auto-fetch failed:", err);
+      }
+    }
+
+    // Auto-fetch snapshot for effectiveTicker
+    let autoSnapshot = null;
+
+    if (effectiveTicker) {
+      try {
+        const snap = await getMarketQuote(effectiveTicker, userId, tenantId);
+
+        if (snap) {
+          autoSnapshot = [{
+            symbol: effectiveTicker,
+            bid: snap.bp ?? null,
+            ask: snap.ap ?? null,
+            last: snap["05. price"] ?? null,
+            timestamp: snap["07. latest trading day"] ?? null,
+            volume: snap["06. volume"] ?? null,
+            change: snap["09. change"] ?? null,
+            changePercent: snap["10. change percent"] ?? null,
+          }];
+        }
+      } catch (err) {
+        console.error("Assistant snapshot auto-fetch failed:", err);
+      }
+    }
+
+    // Auto-fetch peers for effectiveTicker
+    let autoPeers = [];
+
+    if (effectiveTicker && PEER_MAP[effectiveTicker]) {
+      const peerSymbols = PEER_MAP[effectiveTicker];
+
+      for (const peer of peerSymbols) {
+        try {
+          const peerFund = await getFundamentals(peer, userId, tenantId);
+          const peerSnap = await getMarketQuote(peer, userId, tenantId);
+
+          autoPeers.push({
+            symbol: peer,
+            fundamentals: compressFundamentals(peerFund),
+            snapshot: compressSnapshot([
+              {
+                symbol: peer,
+                bid: peerSnap?.bp ?? null,
+                ask: peerSnap?.ap ?? null,
+                last: peerSnap?.["05. price"] ?? null,
+                timestamp: peerSnap?.["07. latest trading day"] ?? null,
+                volume: peerSnap?.["06. volume"] ?? null,
+                change: peerSnap?.["09. change"] ?? null,
+                changePercent: peerSnap?.["10. change percent"] ?? null,
+              },
+            ]),
+          });
+        } catch (err) {
+          console.error("Assistant peer auto-fetch failed for:", peer, err);
+        }
+      }
+    }
+
+    let marketOverview = null;
+
+    if (isMarketMode) {
+      try {
+        // Fetch major indexes
+        const sp500 = await getMarketQuote("^GSPC", userId, tenantId);
+        const nasdaq = await getMarketQuote("^IXIC", userId, tenantId);
+        const dow = await getMarketQuote("^DJI", userId, tenantId);
+
+        // Fetch sector performance (MVP: static list of ETFs)
+        const SECTOR_ETFS = {
+          Technology: "XLK",
+          Financials: "XLF",
+          Energy: "XLE",
+          Industrials: "XLI",
+          Healthcare: "XLV",
+          ConsumerDiscretionary: "XLY",
+          ConsumerStaples: "XLP",
+          Utilities: "XLU",
+          Materials: "XLB",
+          RealEstate: "XLRE",
+          Communications: "XLC",
+        };
+
+        const sectorData = {};
+
+        for (const [sector, symbol] of Object.entries(SECTOR_ETFS)) {
+          try {
+            const snap = await getMarketQuote(symbol, userId, tenantId);
+            sectorData[sector] = {
+              symbol,
+              change: snap?.["09. change"] ?? null,
+              changePercent: snap?.["10. change percent"] ?? null,
+            };
+          } catch (err) {
+            console.error("Sector fetch failed:", sector, err);
+          }
+        }
+
+        // Fetch top gainers/losers (MVP: use existing watchlist sentiment)
+        const gainers = [];
+        const losers = [];
+
+        if (watchlistSentiment?.top_positive) {
+          for (const item of watchlistSentiment.top_positive) {
+            gainers.push(item);
+          }
+        }
+
+        if (watchlistSentiment?.top_negative) {
+          for (const item of watchlistSentiment.top_negative) {
+            losers.push(item);
+          }
+        }
+
+        marketOverview = {
+          indexes: {
+            sp500: compressSnapshot([
+              {
+                symbol: "^GSPC",
+                last: sp500?.["05. price"] ?? null,
+                change: sp500?.["09. change"] ?? null,
+                changePercent: sp500?.["10. change percent"] ?? null,
+              },
+            ]),
+            nasdaq: compressSnapshot([
+              {
+                symbol: "^IXIC",
+                last: nasdaq?.["05. price"] ?? null,
+                change: nasdaq?.["09. change"] ?? null,
+                changePercent: nasdaq?.["10. change percent"] ?? null,
+              },
+            ]),
+            dow: compressSnapshot([
+              {
+                symbol: "^DJI",
+                last: dow?.["05. price"] ?? null,
+                change: dow?.["09. change"] ?? null,
+                changePercent: dow?.["10. change percent"] ?? null,
+              },
+            ]),
+          },
+          sectors: sectorData,
+          gainers,
+          losers,
+        };
+      } catch (err) {
+        console.error("Market-mode fetch failed:", err);
+      }
+    }
+
+    const compressedAutoHistory = compressHistory(autoHistory);
+    const compressedAutoSnapshot = compressSnapshot(autoSnapshot);
+
+    let articles = [];
+    if (effectiveTicker) {
+      try {
+        console.log("[NEWS DEBUG] Fetching news for:", effectiveTicker);
+        const newsResponse = await fetch(
+          `http://localhost:3001/api/market/news/${encodeURIComponent(effectiveTicker)}`
+        );
+        console.log("[NEWS DEBUG] Raw response status:", newsResponse.status);
         const newsJson = await newsResponse.json();
-        articles = newsJson?.articles?.slice(0, 5)
-          || (Array.isArray(newsJson?.feed) ? newsJson.feed.slice(0, 5) : []);
+        console.log("[NEWS DEBUG] Parsed news JSON:", JSON.stringify(newsJson, null, 2));
+        if (newsJson?.Information) {
+          console.warn("[NEWS RATE LIMIT] Alpha Vantage returned Information:", newsJson.Information);
+        }
+        if (newsJson?.Note) {
+          console.warn("[NEWS RATE LIMIT] Alpha Vantage returned Note:", newsJson.Note);
+        }
+        if (newsJson?.["Error Message"]) {
+          console.warn("[NEWS RATE LIMIT] Alpha Vantage returned Error Message:", newsJson["Error Message"]);
+        }
+        console.log("[NEWS SUMMARY] feed length:", Array.isArray(newsJson.feed) ? newsJson.feed.length : "no feed array");
+        console.log("[NEWS SUMMARY] response keys:", Object.keys(newsJson));
+        const rawArticles = newsJson?.articles || (Array.isArray(newsJson?.feed) ? newsJson.feed : []);
+        console.log("[NEWS DEBUG] rawArticles length:", rawArticles.length);
+        console.log("[NEWS DEBUG] rawArticles sample:", rawArticles.slice(0, 2));
+
+        articles = rawArticles.slice(0, 5);
       } catch (err) {
         console.error("Assistant news fetch failed:", err);
       }
@@ -363,30 +699,52 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
 
     const compressedArticles = articles.map((a) => ({
       title: a?.title,
-      summary: a?.summary?.slice(0, 300) || "",
+      summary: (a?.summary || "").slice(0, 300),
       url: a?.url,
       publishedAt: a?.time_published || a?.publishedAt || null,
       source: a?.source || null,
     }));
+    console.log("[NEWS DEBUG] compressedArticles length:", compressedArticles.length);
+    console.log("[NEWS DEBUG] compressedArticles sample:", compressedArticles.slice(0, 2));
 
     const payload = {
-      userQuery: req.body?.query || message,
-      ticker,
-      fundamentals: compressedFundamentals,
-      sentiment,
-      watchlistContext: watchlistSentiment,
+      query,
+      ticker: effectiveTicker,
+
+      fundamentals: compressedAutoFundamentals,
+      history: compressedAutoHistory,
+      snapshot: compressedAutoSnapshot,
+      peers: autoPeers,
+      marketMode: isMarketMode,
+      marketOverview,
+
+      sentiment: autoSentiment,
+      sentimentArticles: autoSentimentArticles,
       articles: compressedArticles,
+
+      account: compressed.account,
+      positions: compressedPositions,
+      orders: compressedOrders,
+
+      watchlistSentiment,
+
+      userId,
+      tenantId,
     };
 
 
     const systemPrompt = `
     You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
     Your purpose is to turn the provided compressed portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
+
+    You will receive ALL research inputs as a single structured JSON object.
+    Each field in the JSON is already compressed (e.g., compressed fundamentals, compressed history, compressed positions, compressed orders, compressed snapshot, sentiment, sentimentArticles, watchlistSentiment, and articles).
+    Use ONLY the fields present in the JSON. Do NOT assume or invent missing data.
     
-    RESEARCH MODE (A2): You will receive COMPRESSED research data including sentiment, news, and watchlist context.
+    RESEARCH MODE (A2): You will receive COMPRESSED research data as JSON fields, including sentiment, news, and watchlist context.
     Operating assumptions:
     - Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
-    - Use ONLY the COMPRESSED information provided. Do NOT assume missing fields—they are intentionally compressed.
+    - Use ONLY the COMPRESSED JSON fields provided. Do NOT assume missing fields - they are intentionally compressed.
     - Do NOT request additional data beyond what's provided.
     - Be decisive when data is sufficient; be transparent when it is not.
     
@@ -400,6 +758,12 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     - articles grouped by sentiment: positive (>0.2), negative (<-0.2), neutral
     - positive and negative catalyst drivers (top 3 each)
     - ticker mentions and sentiment labels per article
+
+    AUTO-FETCHED NEWS ("articles" field):
+    - "articles" contains the latest major news items for the active ticker (auto-fetched, up to a small recent set).
+    - Each article includes: title, summary, url, publishedAt, and source.
+    - Use "articles" to understand the most recent catalysts and headlines, even when sentimentArticles are not available.
+    - If both sentimentArticles and articles are present, treat sentimentArticles as sentiment-annotated news and "articles" as raw latest headlines.
     
     WATCHLIST SENTIMENT:
     - top positive sentiment movers in your watchlist
@@ -429,13 +793,14 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
     - Reference only the compressed fields provided (do not invent missing fields).
     - Integrate sentiment and news findings into your rationale
 
-    When "articles" are provided:
+    When "articles" (auto-fetched news) or sentimentArticles are provided:
     - Identify bullish and bearish catalysts
     - Extract key themes and drivers
     - Connect news to fundamentals, sentiment, and price action
     - Highlight risks and opportunities
     - Reference articles by title only
     - Do NOT hallucinate missing articles
+    - If no articles are provided, say so briefly.
 
     Output requirements:
     A) Snapshot (current state analysis)
@@ -462,8 +827,7 @@ ${JSON.stringify(compressed.watchlistSentiment, null, 2)}
           {
             role: "user",
             content: [
-              { type: "text", text: JSON.stringify(payload, null, 2) },
-              { type: "text", text: `User message: ${message}` }
+              { type: "text", text: JSON.stringify(payload) }
             ]
           }
         ]
