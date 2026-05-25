@@ -75,6 +75,7 @@ function AppShell({ initialTab = 'overview' }) {
             setMarketSnapshot={setMarketSnapshot}
             setActiveSymbol={setActiveSymbol}
             activeSymbol={activeSymbol}
+            setActiveTab={setActiveTab}
           />
         )}
 

@@ -1,4 +1,4 @@
-export default function PositionsCard({ positions, loading, error }) {
+export default function PositionsCard({ positions, loading, error, scrollable = false }) {
   // Loading state
   if (loading) {
     return <div className="card">Loading positions…</div>;
@@ -17,8 +17,9 @@ export default function PositionsCard({ positions, loading, error }) {
   // Normal render
   return (
     <div className="card">
-      <h3>Positions</h3>
+      <h3>Positions <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>{positions.length} open</span></h3>
 
+      <div className={scrollable ? 'positions-scroll' : undefined}>
       <table className="data-table">
         <thead>
           <tr>
@@ -51,6 +52,7 @@ export default function PositionsCard({ positions, loading, error }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

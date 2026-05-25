@@ -1,10 +1,8 @@
-import AccountCard from "../components/AccountCard";
 import PositionsCard from "../components/PositionsCard";
-import OrdersCard from "../components/OrdersCard";
 import MarketSnapshot from "../components/MarketSnapshot";
-import QuickActions from "../components/QuickActions";
-import SentimentDashboardCard from "../components/sentiment/SentimentDashboardCard";
-import HistoricalSparklineCard from "../components/HistoricalSparklineCard";
+import PortfolioChartHero from "../components/PortfolioChartHero";
+import PLCard from "../components/PLCard";
+import OverviewSidebar from "../components/OverviewSidebar";
 
 export default function Dashboard({
   account,
@@ -15,54 +13,51 @@ export default function Dashboard({
   marketSnapshot,
   setMarketSnapshot,
   setActiveSymbol,
-  activeSymbol
+  activeSymbol,
+  setActiveTab,
 }) {
   return (
     <>
-      <header className="page-header">
-        <h1 className="page-title">Dashboard</h1>
-        <p className="page-subtitle">Your trading overview at a glance.</p>
-      </header>
-
       {error && <div className="alert error">{error}</div>}
 
-      {/* Top Grid: Account, Market Snapshot, Historical, Quick Actions */}
-      <section className="grid grid-4">
-        <AccountCard
+      <div className="ov-layout">
+        {/* ── Left column ── */}
+        <div className="ov-left">
+          <PortfolioChartHero
+            account={account}
+            loading={loading}
+            onClick={() => setActiveTab?.('portfolio')}
+          />
+
+          <div className="ov-sub-grid">
+            <PositionsCard
+              positions={positions}
+              loading={loading}
+              error={error}
+              scrollable
+            />
+
+            <div className="ov-right-stack">
+              <MarketSnapshot
+                onSnapshot={setMarketSnapshot}
+                loading={loading}
+                error={error}
+              />
+              <PLCard account={account} positions={positions} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right: AlphaBot sidebar ── */}
+        <OverviewSidebar
           account={account}
-          loading={loading}
-          error={error}
-        />
-
-        <MarketSnapshot
-          onSnapshot={setMarketSnapshot}
-          loading={loading}
-          error={error}
-        />
-
-        <HistoricalSparklineCard symbol={activeSymbol || "AAPL"} />
-
-        <QuickActions onSymbolSelected={setActiveSymbol} />
-      </section>
-
-      <section className="grid grid-1">
-        <SentimentDashboardCard />
-      </section>
-
-      {/* Bottom Grid: Positions + Orders */}
-      <section className="grid grid-2">
-        <PositionsCard
           positions={positions}
-          loading={loading}
-          error={error}
-        />
-
-        <OrdersCard
           orders={orders}
-          loading={loading}
-          error={error}
+          marketSnapshot={marketSnapshot}
+          activeSymbol={activeSymbol}
+          onNavigateToAssistant={() => setActiveTab?.('assistant')}
         />
-      </section>
+      </div>
     </>
   );
 }
