@@ -42,6 +42,8 @@ import {
   getSnapshotHistory,
   getWatchList,
 } from "./services/sentimentDb.js";
+import { resolveContext } from "./services/contextResolver.js";
+import { getSingleSymbolPrompt, getMarketPrompt } from "./services/systemPrompts.js";
 
 
 dotenv.config();
@@ -90,6 +92,10 @@ app.post("/api/assistant", async (req, res) => {
   try {
     const { message, context = {} } = req.body;
     const { id: userId, tenantId } = req.user;
+
+    // Resolve context — UI symbol wins, message inference is fallback
+    const resolved = resolveContext(context.symbol, message);
+    console.log('[CONTEXT]', resolved.mode, '|', resolved.symbol || 'no symbol');
     let account = context.account ? attachEntityScope(context.account, req.user) : null;
     let positions = Array.isArray(context.positions)
       ? attachEntityScopeList(context.positions, req.user)
@@ -333,31 +339,10 @@ app.post("/api/assistant", async (req, res) => {
         : (typeof req.body?.message === "string" && req.body.message.trim().length > 0)
             ? req.body.message
             : "";
-    const explicitTicker = req.body?.ticker || null;
 
-    // Extract ALL 1-5 letter words
-    const matches = [...query.matchAll(/\b[a-zA-Z]{1,5}\b/g)];
-
-    // Normalize to uppercase
-    const allCandidates = matches.map(m => m[0].toUpperCase());
-
-    // Filter out common English words
-    const COMMON_WORDS = new Set([
-      "AND", "THE", "FOR", "ARE", "BUT", "WITH", "THIS", "THAT",
-      "FROM", "WHAT", "ABOUT", "YOUR", "THOUGHTS", "DO", "YOU", "THINK"
-    ]);
-
-    const filtered = allCandidates.filter(w => !COMMON_WORDS.has(w));
-
-    // Choose the LAST remaining candidate (most likely to be the ticker)
-    const inferredTicker = filtered.length > 0 ? filtered[filtered.length - 1] : null;
-
-    const effectiveTicker = explicitTicker || inferredTicker;
-    const userQuery = query;
-    const isMarketMode =
-      !effectiveTicker &&
-      typeof userQuery === "string" &&
-      userQuery.trim().length > 0;
+    // Use resolver output — replaces the old NLP inference block
+    const effectiveTicker = resolved.symbol;
+    const isMarketMode = resolved.mode === 'market';
 
     // Auto-fetch fundamentals for effectiveTicker
     let autoFundamentals = null;
@@ -733,81 +718,9 @@ app.post("/api/assistant", async (req, res) => {
     };
 
 
-    const systemPrompt = `
-    You are AlphaBot, an experimental AI trading assistant embedded in a trading dashboard.
-    Your purpose is to turn the provided compressed portfolio + market inputs into clear, structured analysis and actionable trade ideas to make the portfolio grow in value.
-
-    You will receive ALL research inputs as a single structured JSON object.
-    Each field in the JSON is already compressed (e.g., compressed fundamentals, compressed history, compressed positions, compressed orders, compressed snapshot, sentiment, sentimentArticles, watchlistSentiment, and articles).
-    Use ONLY the fields present in the JSON. Do NOT assume or invent missing data.
-    
-    RESEARCH MODE (A2): You will receive COMPRESSED research data as JSON fields, including sentiment, news, and watchlist context.
-    Operating assumptions:
-    - Initially using Paper-trading / experimental use. The user makes final decisions; you do not place trades.
-    - Use ONLY the COMPRESSED JSON fields provided. Do NOT assume missing fields - they are intentionally compressed.
-    - Do NOT request additional data beyond what's provided.
-    - Be decisive when data is sufficient; be transparent when it is not.
-    
-    SENTIMENT DATA:
-    - latest sentiment score and label for the symbol
-    - 30-day sentiment history with trend analysis (3-day, 7-day, 30-day deltas)
-    - trend direction ("up", "down", "flat") based on 7-day change
-    
-    SENTIMENT ARTICLES:
-    - relevant news articles with sentiment scores (-1.0 to +1.0)
-    - articles grouped by sentiment: positive (>0.2), negative (<-0.2), neutral
-    - positive and negative catalyst drivers (top 3 each)
-    - ticker mentions and sentiment labels per article
-
-    AUTO-FETCHED NEWS ("articles" field):
-    - "articles" contains the latest major news items for the active ticker (auto-fetched, up to a small recent set).
-    - Each article includes: title, summary, url, publishedAt, and source.
-    - Use "articles" to understand the most recent catalysts and headlines, even when sentimentArticles are not available.
-    - If both sentimentArticles and articles are present, treat sentimentArticles as sentiment-annotated news and "articles" as raw latest headlines.
-    
-    WATCHLIST SENTIMENT:
-    - top positive sentiment movers in your watchlist
-    - top negative sentiment movers in your watchlist
-    - total watchlist count
-    
-    Core tasks:
-    1) Explain market concepts, mechanics, and strategies (stocks + options).
-    2) Analyze current positions using compressed data (compressed fundamentals, compressed history, compressed positions, compressed orders, compressed snapshot).
-    3) Use sentiment data to detect narrative trends and identify catalysts driving price movements.
-    4) Cross-reference sentiment articles with price action to spot divergences or confirmations.
-    5) Propose trade candidates that fit portfolio constraints and user's stated goals.
-    6) Provide clear rationale, risk analysis, and explicit invalidation criteria.
-    
-    SENTIMENT ANALYSIS INSTRUCTIONS:
-    - Use sentiment score to assess market narrative and retail/professional bias
-    - Identify positive catalysts in sentiment articles (news drivers that explain rallies)
-    - Identify negative catalysts in sentiment articles (risks or concerns driving declines)
-    - Detect divergences: strong sentiment but weak price action, or vice versa
-    - Monitor sentiment trends: increasing positive sentiment may signal sustained demand
-    - Note sentiment reversals: sudden negative articles after positive trends suggest inflection points
-    
-    When you make recommendations:
-    - Provide reasoning in a compact, checkable way.
-    - Include at least one alternative path.
-    - Tie every suggestion to available buying power, position sizing, and risk controls.
-    - Reference only the compressed fields provided (do not invent missing fields).
-    - Integrate sentiment and news findings into your rationale
-
-    When "articles" (auto-fetched news) or sentimentArticles are provided:
-    - Identify bullish and bearish catalysts
-    - Extract key themes and drivers
-    - Connect news to fundamentals, sentiment, and price action
-    - Highlight risks and opportunities
-    - Reference articles by title only
-    - Do NOT hallucinate missing articles
-    - If no articles are provided, say so briefly.
-
-    Output requirements:
-    A) Snapshot (current state analysis)
-    B) Primary idea (best opportunity)
-    C) Secondary ideas (2-3 alternatives)
-    D) Questions needed (if data gaps exist)
-    `;
+    const systemPrompt = resolved.mode === 'single'
+      ? getSingleSymbolPrompt(resolved.symbol)
+      : getMarketPrompt();
 
     const primaryModel = "claude-haiku-4-5-20251001";
     const fallbackModel = "claude-sonnet-4-6";
@@ -920,6 +833,115 @@ app.post("/api/assistant", async (req, res) => {
     }
   } finally {
     console.timeEnd("[TIMING] assistant_total");
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Assistant Insights Endpoint
+// ─────────────────────────────────────────────────────────────
+
+app.get("/api/assistant/insights", async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+
+    const cards = [
+      {
+        type: "briefing",
+        ticker: "MARKET",
+        title: "Morning briefing",
+        body: "Morning market briefing is enabled. Watchlist sentiment cards will appear when signals are detected.",
+        action: "Give me a full market briefing for today",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    const watchlist = await getWatchList(userId).catch(() => []);
+    const symbols = Array.isArray(watchlist)
+      ? watchlist
+          .map((item) => String(item?.ticker || item?.symbol || "").toUpperCase())
+          .filter(Boolean)
+          .slice(0, 10)
+      : [];
+
+    // Fetch positions to cross-reference sentiment with held stocks
+    let positions = [];
+    try {
+      positions = await getAlpacaPositions(userId, tenantId);
+    } catch { /* positions optional */ }
+
+    if (symbols.length > 0) {
+      const sentimentResults = await Promise.all(
+        symbols.map(async (symbol) => {
+          try {
+            const snapshot = await getLatestSnapshot(symbol);
+            return {
+              symbol,
+              score: Number(snapshot?.sentimentScore ?? 0),
+              label: snapshot?.sentimentLabel || "neutral",
+              signalStrength: snapshot?.signalStrength || "low",
+              trend: snapshot?.trend || "stable",
+              reasoning: snapshot?.reasoning || "",
+              timestamp: snapshot?.timestamp || null,
+            };
+          } catch {
+            return { symbol, score: 0, label: "neutral", signalStrength: "low", trend: "stable", reasoning: "" };
+          }
+        })
+      );
+
+      const sorted = sentimentResults.sort((a, b) => b.score - a.score);
+
+      // Opportunity: strong bullish signal — high score + high/moderate signal strength + rising
+      const topOpportunity = sorted.find(
+        (item) => item.score > 0.15 && item.signalStrength !== "low"
+      ) || sorted.find((item) => item.score > 0.15) || null;
+
+      // Risk: declining sentiment on a held position (or just bearish watchlist item)
+      const topRisk = [...sorted].reverse().find((item) => item.score < -0.15) || null;
+
+      if (topOpportunity) {
+        const strengthNote = topOpportunity.signalStrength === "high"
+          ? "Strong signal"
+          : topOpportunity.signalStrength === "moderate"
+            ? "Moderate signal"
+            : "Signal";
+        const trendNote = topOpportunity.trend === "rising" ? ", rising trend" : "";
+
+        cards.push({
+          type: "opportunity",
+          ticker: topOpportunity.symbol,
+          title: `${topOpportunity.symbol} — ${strengthNote.toLowerCase()}${trendNote}`,
+          body:
+            `Sentiment ${topOpportunity.score.toFixed(2)} (${topOpportunity.label}).` +
+            (topOpportunity.reasoning ? ` ${topOpportunity.reasoning}` : ""),
+          action: `Analyze ${topOpportunity.symbol} for a potential entry given the current sentiment`,
+          timestamp: topOpportunity.timestamp || new Date().toISOString(),
+        });
+      }
+
+      if (topRisk) {
+        const held = positions.find(p => p.symbol === topRisk.symbol);
+        const heldNote = held
+          ? ` Your position: ${parseFloat(held.unrealized_plpc || held.unrealizedPLPercent || 0) >= 0 ? "+" : ""}${(parseFloat(held.unrealized_plpc || held.unrealizedPLPercent || 0) * 100).toFixed(1)}%.`
+          : "";
+        const trendNote = topRisk.trend === "falling" ? " Trend falling." : "";
+
+        cards.push({
+          type: "risk",
+          ticker: topRisk.symbol,
+          title: `${topRisk.symbol} — bearish signal`,
+          body:
+            `Sentiment ${topRisk.score.toFixed(2)} (${topRisk.label}).${trendNote}${heldNote}`,
+          action: `Should I cut or hold my ${topRisk.symbol} position given the declining sentiment?`,
+          timestamp: topRisk.timestamp || new Date().toISOString(),
+        });
+      }
+    }
+
+    res.json({ insights: cards.slice(0, 3) });
+  } catch (err) {
+    console.error("Assistant insights error:", err);
+    res.status(500).json({ error: "Failed to load assistant insights" });
   }
 });
 

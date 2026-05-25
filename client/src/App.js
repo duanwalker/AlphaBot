@@ -3,6 +3,7 @@ import useAlpaca from "./hooks/useAlpaca";
 import { useState } from "react";
 
 import AssistantPanel from "./components/AssistantPanel";
+import AssistantPage from "./pages/Assistant";
 import SettingsLayout from "./pages/Settings/SettingsLayout";
 import Profile from "./pages/Settings/Profile";
 import BillingUsage from "./pages/Settings/BillingUsage";
@@ -27,11 +28,16 @@ const TAB_LABELS = {
 
 function AppShell({ initialTab = 'overview' }) {
   const { account, positions, orders, loading, error } = useAlpaca();
-  const [activeTab, setActiveTab]       = useState(initialTab);
+  const [activeTab, setActiveTab]           = useState(initialTab);
+  const [showAssistant, setShowAssistant]   = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
-  const [activeSymbol, setActiveSymbol] = useState(null);
+  const [activeSymbol, setActiveSymbol]     = useState(null);
 
-  const handleTabClick = (tab) => setActiveTab(tab);
+  const handleTabClick = (tab) => {
+    setActiveTab(tab);
+    setActiveSymbol(null); // each tab owns its own symbol context
+    if (tab === 'assistant') setShowAssistant(false); // inline takes over
+  };
 
   return (
     <div className="app-root">
@@ -59,6 +65,15 @@ function AppShell({ initialTab = 'overview' }) {
         </div>
 
         <div className="nav-right">
+          {activeTab !== 'assistant' && (
+            <button
+              className="ai-trigger-btn"
+              onClick={() => setShowAssistant(true)}
+              title="Ask AlphaBot"
+            >
+              ✦ AI
+            </button>
+          )}
           <div className="user-pill">duan</div>
         </div>
       </nav>
@@ -80,18 +95,19 @@ function AppShell({ initialTab = 'overview' }) {
         )}
 
         {activeTab === 'assistant' && (
-          <AssistantPanel
-            inline
-            open
+          <AssistantPage
             account={account}
             positions={positions}
             orders={orders}
             marketSnapshot={marketSnapshot}
-            symbol={activeSymbol}
+            activeSymbol={activeSymbol}
+            onNavigate={setActiveTab}
           />
         )}
 
-        {activeTab === 'research' && <Research />}
+        {activeTab === 'research' && (
+          <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} />
+        )}
 
         {activeTab === 'sentiment' && (
           <div className="tab-placeholder">
@@ -112,6 +128,18 @@ function AppShell({ initialTab = 'overview' }) {
         )}
       </main>
 
+      {/* Slide-over — active on all tabs except the inline Assistant tab */}
+      {activeTab !== 'assistant' && (
+        <AssistantPanel
+          open={showAssistant}
+          onClose={() => setShowAssistant(false)}
+          account={account}
+          positions={positions}
+          orders={orders}
+          marketSnapshot={marketSnapshot}
+          symbol={activeSymbol}
+        />
+      )}
     </div>
   );
 }
