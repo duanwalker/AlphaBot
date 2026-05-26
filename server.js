@@ -1169,6 +1169,95 @@ app.get("/api/usage/logs", (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Options Endpoints
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/options/chain/:symbol?expiration=2026-05-16
+app.get('/api/options/chain/:symbol', async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const expiration = req.query.expiration;
+
+    const url = expiration
+      ? `https://data.alpaca.markets/v1beta1/options/snapshots/${symbol}?expiration_date=${expiration}&limit=100`
+      : `https://data.alpaca.markets/v1beta1/options/snapshots/${symbol}?limit=100`;
+
+    const r = await fetch(url, {
+      headers: {
+        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
+        'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
+      },
+    });
+
+    const responseText = await r.text();
+    console.log('[OPTIONS] chain status:', r.status);
+    if (!r.ok) {
+      console.log('[OPTIONS] chain body:', responseText.slice(0, 300));
+      return res.json({ snapshots: {}, error: `Alpaca returned ${r.status}` });
+    }
+
+    res.json(JSON.parse(responseText));
+  } catch (e) {
+    console.error('[OPTIONS] chain error:', e.message);
+    res.json({ snapshots: {}, error: e.message });
+  }
+});
+
+// GET /api/options/expirations/:symbol
+app.get('/api/options/expirations/:symbol', async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const r = await fetch(
+      `https://data.alpaca.markets/v1beta1/options/contracts?underlying_symbols=${symbol}&limit=50`,
+      {
+        headers: {
+          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
+          'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
+        },
+      }
+    );
+
+    const responseText = await r.text();
+    console.log('[OPTIONS] expirations status:', r.status);
+    console.log('[OPTIONS] expirations body:', responseText.slice(0, 300));
+
+    if (!r.ok) {
+      return res.json({
+        expirations: [],
+        error: `Alpaca returned ${r.status}`,
+        message: 'Options data may not be available on this account',
+      });
+    }
+
+    const data = JSON.parse(responseText);
+    const expirations = [...new Set(
+      (data.option_contracts || []).map(c => c.expiration_date)
+    )].sort();
+
+    res.json({ expirations });
+  } catch (e) {
+    console.error('[OPTIONS] expirations error:', e.message);
+    res.json({
+      expirations: [],
+      error: e.message,
+      message: 'Options data unavailable',
+    });
+  }
+});
+
+// POST /api/options/orders
+app.post('/api/options/orders', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const order = req.body;
+    const data = await createAlpacaOrder(order, userId, tenantId);
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // Health Check
 // ─────────────────────────────────────────────────────────────
 

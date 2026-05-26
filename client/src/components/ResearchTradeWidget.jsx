@@ -3,7 +3,7 @@ import useToast from '../hooks/useToast';
 
 const ORDER_TYPES = ['market', 'limit', 'stop', 'stop_limit'];
 
-export default function ResearchTradeWidget({ symbol, onNavigateOptions }) {
+export default function ResearchTradeWidget({ symbol, onNavigateOptions, onSetSymbol }) {
   const [side, setSide]           = useState('buy');
   const [qty, setQty]             = useState(1);
   const [orderType, setOrderType] = useState('market');
@@ -127,7 +127,7 @@ export default function ResearchTradeWidget({ symbol, onNavigateOptions }) {
       {onNavigateOptions && (
         <button
           className="rw-options-link"
-          onClick={() => onNavigateOptions('options')}
+          onClick={() => { onSetSymbol?.(symbol); onNavigateOptions('options'); }}
         >
           View options ideas ↗
         </button>

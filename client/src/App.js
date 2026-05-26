@@ -12,6 +12,9 @@ import Preferences from "./pages/Settings/Preferences";
 import About from "./pages/Settings/About";
 import Research from "./pages/Research";
 import Dashboard from "./pages/Dashboard";
+import Options from "./pages/Options";
+import Portfolio from "./pages/Portfolio";
+import SentimentPage from "./pages/SentimentPage";
 
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 
@@ -32,6 +35,7 @@ function AppShell({ initialTab = 'overview' }) {
   const [showAssistant, setShowAssistant]   = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
   const [activeSymbol, setActiveSymbol]     = useState(null);
+  const [externalPrompt, setExternalPrompt] = useState(null);
 
   const handleTabClick = (tab) => {
     setActiveTab(tab);
@@ -109,22 +113,26 @@ function AppShell({ initialTab = 'overview' }) {
           <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} />
         )}
 
-        {activeTab === 'sentiment' && (
-          <div className="tab-placeholder">
-            <p>Sentiment — coming soon.</p>
-          </div>
-        )}
+        {activeTab === 'sentiment' && <SentimentPage />}
 
         {activeTab === 'options' && (
-          <div className="tab-placeholder">
-            <p>Options — coming soon.</p>
-          </div>
+          <Options
+            initialSymbol={activeSymbol}
+            setActiveSymbol={setActiveSymbol}
+            setShowAssistant={setShowAssistant}
+            setExternalPrompt={setExternalPrompt}
+          />
         )}
 
         {activeTab === 'portfolio' && (
-          <div className="tab-placeholder">
-            <p>Portfolio — coming soon.</p>
-          </div>
+          <Portfolio
+            account={account}
+            positions={positions}
+            orders={orders}
+            loading={loading}
+            error={error}
+            setActiveTab={setActiveTab}
+          />
         )}
       </main>
 
@@ -138,6 +146,7 @@ function AppShell({ initialTab = 'overview' }) {
           orders={orders}
           marketSnapshot={marketSnapshot}
           symbol={activeSymbol}
+          externalPrompt={externalPrompt}
         />
       )}
     </div>

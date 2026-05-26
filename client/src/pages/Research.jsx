@@ -178,6 +178,7 @@ export default function Research({ onNavigate, setActiveSymbol: setAppSymbol }) 
         <ResearchTradeWidget
           symbol={activeSymbol}
           onNavigateOptions={onNavigate}
+          onSetSymbol={setAppSymbol}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import MarketSnapshot from "../components/MarketSnapshot";
 import PortfolioChartHero from "../components/PortfolioChartHero";
 import PLCard from "../components/PLCard";
 import OverviewSidebar from "../components/OverviewSidebar";
+import SentimentDashboardCard from "../components/sentiment/SentimentDashboardCard";
 
 export default function Dashboard({
   account,
@@ -44,6 +45,7 @@ export default function Dashboard({
                 error={error}
               />
               <PLCard account={account} positions={positions} />
+              <SentimentDashboardCard />
             </div>
           </div>
         </div>

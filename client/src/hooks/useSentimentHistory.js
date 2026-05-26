@@ -21,7 +21,7 @@ export default function useSentimentHistory(ticker, days = 30) {
 
   const fetchSentimentHistory = useCallback(async (normalizedTicker, normalizedDays, signal) => {
     const response = await axios.get(
-      `/api/sentiment/history/${encodeURIComponent(normalizedTicker)}?days=${encodeURIComponent(normalizedDays)}`,
+      `/api/sentiment/${encodeURIComponent(normalizedTicker)}/history?days=${encodeURIComponent(normalizedDays)}`,
       { signal }
     );
 

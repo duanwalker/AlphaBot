@@ -79,7 +79,7 @@ function MiniSentimentBar({ score }) {
   );
 }
 
-function SentimentRow({ symbol, selected, onSelect }) {
+function SentimentRow({ symbol, selected, onSelect, selectedColor }) {
   const { data: snapshot } = useLatestSentiment(symbol);
   const [removing, setRemoving] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -209,14 +209,29 @@ function SentimentRow({ symbol, selected, onSelect }) {
       <style>
         {`.sentiment-row:hover:not(.selected) { background: rgba(99,102,241,0.18) !important; }`}
       </style>
-      <button
-        type="button"
+      <div
         className={`sentiment-row ${selected ? "selected" : ""}`}
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(symbol)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(symbol); } }}
         style={{
           width: "100%",
-          border: selected ? "1px solid rgba(99,102,241,0.65)" : "1px solid rgba(255,255,255,0.08)",
-          background: selected ? "rgba(99,102,241,0.12)" : "rgba(2,6,23,0.4)",
+          ...(selected
+            ? selectedColor
+              ? {
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderLeft: `3px solid ${selectedColor}`,
+                  background: "rgba(34,197,94,0.07)",
+                }
+              : {
+                  border: "1px solid rgba(99,102,241,0.65)",
+                  background: "rgba(99,102,241,0.12)",
+                }
+            : {
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(2,6,23,0.4)",
+              }),
           borderRadius: 10,
           padding: "10px 12px",
           marginBottom: 8,
@@ -329,7 +344,7 @@ function SentimentRow({ symbol, selected, onSelect }) {
             </span>
           )}
         </div>
-      </button>
+      </div>
     </>
   );
 }

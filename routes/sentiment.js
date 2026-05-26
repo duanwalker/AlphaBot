@@ -199,7 +199,12 @@ router.get("/:symbol/history", async (req, res) => {
       return res.status(400).json({ error });
     }
 
-    const history = await sentimentDb.getHistory(symbol);
+    let days = Number(req.query.days || 30);
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      days = 30;
+    }
+
+    const history = await getSnapshotHistory(symbol, days);
     return res.json(history);
   } catch (err) {
     console.error("Sentiment history error:", err);
