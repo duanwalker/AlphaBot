@@ -9,6 +9,7 @@ import {
   getCache,
   getOrSetCache,
   setCache,
+  deleteCacheKey,
 } from "./cache.js";
 import { attachEntityScope, attachEntityScopeList } from "./entityMetadata.js";
 import { normalizePriceData } from "./normalizePriceData.js";
@@ -50,48 +51,143 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
   const normalizedSymbol = symbol.toUpperCase();
   const cacheKey = buildCacheKey("fundamentals", [normalizedSymbol]);
 
-  const cached = await getOrSetCache(cacheKey, FUNDAMENTALS_TTL, async () => {
-    const key = process.env.ALPHA_VANTAGE_API_KEY;
-    const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${normalizedSymbol}&apikey=${key}`;
-    const response = await axios.get(url);
-    const data = response.data;
+  // Evict stale entries that contain only Yahoo 52-week data (no Polygon fields)
+  const existing = getCache(cacheKey);
+  if (existing && !existing.peRatio && !existing.name) {
+    console.warn(`[FUNDAMENTALS] Stale cache entry for ${normalizedSymbol} — clearing and re-fetching`);
+    deleteCacheKey(cacheKey);
+  }
 
-    // Alpha Vantage returns a Note field when rate-limited, or an Error Message
-    // for invalid symbols/API keys. Returning null here prevents these bad
-    // responses from being stored in the 24-hour cache.
-    if (
-      !data ||
-      Object.keys(data).length === 0 ||
-      data.Note ||
-      data['Error Message'] ||
-      data['Information']
-    ) {
-      console.warn(`[Fundamentals] Alpha Vantage non-data response for ${normalizedSymbol}:`, Object.keys(data || {}));
+  const cached = await getOrSetCache(cacheKey, FUNDAMENTALS_TTL, async () => {
+    const polygonKey = process.env.POLYGON_API_KEY;
+
+    if (!polygonKey) {
+      console.warn('[FUNDAMENTALS] POLYGON_API_KEY not set');
       return null;
     }
 
-    const normalized = await normalizePriceData(normalizedSymbol, userId);
+    // Fetch ticker details (name, description, exchange)
+    const detailsUrl =
+      `https://api.polygon.io/v3/reference/tickers/${normalizedSymbol}?apiKey=${polygonKey}`;
+
+    let details = {};
+    try {
+      const dr = await axios.get(detailsUrl);
+      details = dr.data?.results || {};
+
+      if (dr.data?.status === 'ERROR' || dr.data?.error) {
+        console.warn('[FUNDAMENTALS] Polygon error:', dr.data?.error);
+        return null;
+      }
+    } catch (err) {
+      console.error('[FUNDAMENTALS] Polygon details error:', err.message);
+      return null;
+    }
+
+    // Fetch financials (EPS, revenue etc)
+    const financialsUrl =
+      `https://api.polygon.io/vX/reference/financials` +
+      `?ticker=${normalizedSymbol}&limit=1&apiKey=${polygonKey}`;
+
+    let financials = {};
+    try {
+      const fr = await axios.get(financialsUrl);
+      const results = fr.data?.results?.[0] || {};
+      const income = results.financials?.income_statement || {};
+
+      financials = {
+        eps: income.basic_earnings_per_share?.value,
+        revenue: income.revenues?.value,
+        netIncome: income.net_income_loss?.value,
+      };
+    } catch (err) {
+      // Financials optional — don't fail if unavailable
+      console.warn('[FUNDAMENTALS] Polygon financials unavailable for', normalizedSymbol);
+    }
+
+    // Calculate P/E from EPS + current price (Alpaca primary, AV GLOBAL_QUOTE fallback)
+    let peRatio = null;
+    const epsVal = financials.eps != null ? parseFloat(financials.eps) : NaN;
+    if (!isNaN(epsVal) && epsVal !== 0) {
+      let price = null;
+
+      // Primary: Alpaca latest quote (may be null outside market hours)
+      try {
+        const quoteRes = await fetch(
+          `https://data.alpaca.markets/v2/stocks/${normalizedSymbol}/quotes/latest`,
+          {
+            headers: {
+              'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
+              'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
+            },
+          }
+        );
+        if (quoteRes.ok) {
+          const quoteData = await quoteRes.json();
+          const raw =
+            quoteData?.quote?.ap ||
+            quoteData?.quote?.bp ||
+            quoteData?.ap ||
+            quoteData?.bp ||
+            null;
+          const parsed = parseFloat(raw);
+          if (!isNaN(parsed) && parsed > 0) price = parsed;
+        }
+      } catch (err) {
+        console.warn('[FUNDAMENTALS] Alpaca price fetch failed:', err.message);
+      }
+
+      // Fallback: Alpha Vantage GLOBAL_QUOTE (works outside market hours)
+      if (!price) {
+        try {
+          const avKey = process.env.ALPHA_VANTAGE_API_KEY;
+          const avRes = await axios.get(
+            `https://www.alphavantage.co/query?function=GLOBAL_QUOTE` +
+            `&symbol=${normalizedSymbol}&apikey=${avKey}`
+          );
+          const avPrice = parseFloat(avRes.data?.['Global Quote']?.['05. price']);
+          if (!isNaN(avPrice) && avPrice > 0) price = avPrice;
+        } catch (err) {
+          console.warn('[FUNDAMENTALS] AV price fallback failed:', err.message);
+        }
+      }
+
+      if (price) {
+        peRatio = (price / epsVal).toFixed(2);
+      }
+    }
+
+    // Get 52W high/low from existing Yahoo service
+    let normalized = {
+      normalized52WeekHigh: null,
+      normalized52WeekLow: null,
+      normalized52WeekSource: null,
+    };
+    try {
+      normalized = await normalizePriceData(normalizedSymbol, userId);
+    } catch (err) {
+      console.warn('[FUNDAMENTALS] 52W normalization failed:', err.message);
+    }
 
     return {
-      symbol: normalizedSymbol,
-      name: data.Name,
-      description: data.Description,
-      sector: data.Sector,
-      industry: data.Industry,
-      marketCap: data.MarketCapitalization,
-      peRatio: data.PERatio,
-      pegRatio: data.PEGRatio,
-      eps: data.EPS,
-      dividendYield: data.DividendYield,
-      profitMargin: data.ProfitMargin,
-      analystTargetPrice: data.AnalystTargetPrice,
-      revenueTTM: data.RevenueTTM,
-      week52High: normalized.normalized52WeekHigh,
-      week52Low: normalized.normalized52WeekLow,
-      normalized52WeekHigh: normalized.normalized52WeekHigh,
-      normalized52WeekLow: normalized.normalized52WeekLow,
+      symbol:             normalizedSymbol,
+      name:               details.name || null,
+      description:        details.description || null,
+      sector:             details.sic_description || null,
+      industry:           details.sic_description || null,
+      marketCap:          details.market_cap || null,
+      peRatio:            peRatio,
+      eps:                financials.eps || null,
+      dividendYield:      null,
+      profitMargin:       null,
+      analystTargetPrice: null,
+      revenueTTM:         financials.revenue || null,
+      beta:               null, // not in Polygon free tier
+      week52High:         normalized.normalized52WeekHigh,
+      week52Low:          normalized.normalized52WeekLow,
+      normalized52WeekHigh:   normalized.normalized52WeekHigh,
+      normalized52WeekLow:    normalized.normalized52WeekLow,
       normalized52WeekSource: normalized.normalized52WeekSource,
-      beta: data.Beta,
     };
   });
 

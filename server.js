@@ -30,6 +30,7 @@ import {
   getMarketQuote,
   getMarketSnapshot,
 } from "./services/marketDataService.js";
+import { buildCacheKey, deleteCacheKey } from "./services/cache.js";
 import {
   compressFundamentals,
   compressHistory,
@@ -1099,6 +1100,14 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
     console.error("Fundamentals error:", e.message);
     res.status(500).json({ error: "Failed to fetch fundamentals" });
   }
+});
+
+app.delete("/api/cache/fundamentals/:symbol", (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const cacheKey = buildCacheKey("fundamentals", [symbol]);
+  deleteCacheKey(cacheKey);
+  console.log(`[CACHE] Cleared fundamentals cache for ${symbol}`);
+  res.json({ cleared: true, symbol });
 });
 
 app.get("/api/history/:symbol", async (req, res) => {

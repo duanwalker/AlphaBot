@@ -63,7 +63,13 @@ function FundamentalsGrid({ symbol }) {
       })
       .catch(err => {
         console.error('[DEBUG] Fetch error:', err);
-        if (!cancelled) setFetchError(err.message || 'Failed to load fundamentals');
+        const msg = err.message || '';
+        const isRateLimit = msg.includes('404') || msg.includes('rate limit') || msg.includes('unavailable');
+        if (!cancelled) setFetchError(
+          isRateLimit
+            ? 'Fundamentals temporarily unavailable. Try again in a few minutes.'
+            : msg || 'Failed to load fundamentals'
+        );
       })
       .finally(() => { if (!cancelled) setLoading(false); });
 
