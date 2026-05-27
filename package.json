@@ -21,7 +21,6 @@
     "frontend": "react-scripts start",
     "build": "react-scripts build",
     "test:azure": "node scripts/testAzureTables.js",
-
     "dev": "nodemon -r dotenv/config server.js",
     "start": "node -r dotenv/config server.js"
   },
@@ -37,5 +36,8 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:3001"
+  "proxy": "http://localhost:3001",
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
 }

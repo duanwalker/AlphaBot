@@ -227,6 +227,21 @@ body::before {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.tab-settings-sep {
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--color-border-tertiary);
+}
+
+.tab-settings-btn:not(.active) {
+  font-size: 14px;
+  color: rgba(156, 163, 175, 0.6);
+}
+
+.tab-settings-btn:not(.active):hover {
+  color: var(--text-muted);
+}
+
 .tab-placeholder {
   color: var(--text-muted);
   padding: 48px;
@@ -1426,6 +1441,13 @@ body::before {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.res-fund-error {
+  font-size: 12px;
+  color: var(--color-text-danger, #f87171);
+  margin: 0;
+  padding: 4px 0;
+}
+
 /* ============================================================
    TRADE WIDGET
    ============================================================ */
@@ -1540,6 +1562,147 @@ body::before {
 
 .rw-options-link:hover {
   color: #a5b4fc;
+}
+
+/* ── Estimated cost row ──────────────────────────────── */
+.rw-cost-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 34px;
+}
+
+.rw-cost-est {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.rw-cost-est--warn {
+  color: var(--color-text-danger, #f87171);
+}
+
+.rw-cost-bp {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.rw-cost-unavail {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.rw-price-per-share {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.rw-warn-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-danger, #f87171);
+}
+
+/* ── Confirmation panel ──────────────────────────────── */
+.rw-confirm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+}
+
+.rw-confirm-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.rw-confirm-row {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.rw-confirm-row--bold {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.rw-confirm-row--muted {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.rw-confirm-row--warn {
+  color: var(--color-text-danger, #f87171);
+  font-weight: 600;
+}
+
+.rw-confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rw-cancel-btn {
+  flex: 1;
+  padding: 9px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-primary);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.rw-cancel-btn:hover:not(:disabled) {
+  background: var(--color-background-tertiary, rgba(255,255,255,0.06));
+  color: var(--color-text-primary);
+}
+
+.rw-cancel-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rw-confirm-btn {
+  flex: 2;
+  padding: 9px;
+  border-radius: var(--border-radius-md);
+  border: none;
+  background: rgba(74, 222, 128, 0.22);
+  color: var(--color-text-success);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rw-confirm-btn:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.38);
+}
+
+.rw-confirm-btn--sell {
+  background: rgba(248, 113, 113, 0.22);
+  color: var(--color-text-danger);
+}
+
+.rw-confirm-btn--sell:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.38);
+}
+
+.rw-confirm-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ====================================================

@@ -56,7 +56,17 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
     const response = await axios.get(url);
     const data = response.data;
 
-    if (!data || Object.keys(data).length === 0) {
+    // Alpha Vantage returns a Note field when rate-limited, or an Error Message
+    // for invalid symbols/API keys. Returning null here prevents these bad
+    // responses from being stored in the 24-hour cache.
+    if (
+      !data ||
+      Object.keys(data).length === 0 ||
+      data.Note ||
+      data['Error Message'] ||
+      data['Information']
+    ) {
+      console.warn(`[Fundamentals] Alpha Vantage non-data response for ${normalizedSymbol}:`, Object.keys(data || {}));
       return null;
     }
 
@@ -66,12 +76,16 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
       symbol: normalizedSymbol,
       name: data.Name,
       description: data.Description,
+      sector: data.Sector,
+      industry: data.Industry,
       marketCap: data.MarketCapitalization,
       peRatio: data.PERatio,
+      pegRatio: data.PEGRatio,
       eps: data.EPS,
       dividendYield: data.DividendYield,
       profitMargin: data.ProfitMargin,
       analystTargetPrice: data.AnalystTargetPrice,
+      revenueTTM: data.RevenueTTM,
       week52High: normalized.normalized52WeekHigh,
       week52Low: normalized.normalized52WeekLow,
       normalized52WeekHigh: normalized.normalized52WeekHigh,

@@ -1,6 +1,7 @@
 import "./App.css";
 import useAlpaca from "./hooks/useAlpaca";
 import { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 
 import AssistantPanel from "./components/AssistantPanel";
 import AssistantPage from "./pages/Assistant";
@@ -16,8 +17,6 @@ import Options from "./pages/Options";
 import Portfolio from "./pages/Portfolio";
 import SentimentPage from "./pages/SentimentPage";
 
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-
 const TABS = ['overview', 'assistant', 'research', 'sentiment', 'options', 'portfolio'];
 
 const TAB_LABELS = {
@@ -30,17 +29,29 @@ const TAB_LABELS = {
 };
 
 function AppShell({ initialTab = 'overview' }) {
-  const { account, positions, orders, loading, error } = useAlpaca();
-  const [activeTab, setActiveTab]           = useState(initialTab);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { account, positions, orders, loading, error, refetchOrders } = useAlpaca();
+  const [activeTab, setActiveTab]           = useState(location.state?.tab || initialTab);
   const [showAssistant, setShowAssistant]   = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
   const [activeSymbol, setActiveSymbol]     = useState(null);
   const [externalPrompt, setExternalPrompt] = useState(null);
 
   const handleTabClick = (tab) => {
+    if (tab === 'settings') {
+      setActiveTab('settings');
+      navigate('/settings');
+      return;
+    }
     setActiveTab(tab);
-    setActiveSymbol(null); // each tab owns its own symbol context
-    if (tab === 'assistant') setShowAssistant(false); // inline takes over
+    setActiveSymbol(null);
+    if (tab === 'assistant') setShowAssistant(false);
+    if (tab === 'portfolio') refetchOrders();
+    // When leaving /settings, navigate back to root and pass the desired tab
+    if (location.pathname.startsWith('/settings')) {
+      navigate('/', { state: { tab } });
+    }
   };
 
   return (
@@ -63,9 +74,17 @@ function AppShell({ initialTab = 'overview' }) {
             </button>
           ))}
 
-          <Link className="tab-settings-link" to="/settings" aria-label="Settings">
-            Settings
-          </Link>
+          <div className="tab-settings-sep">
+            <button
+              role="tab"
+              aria-selected={activeTab === 'settings'}
+              className={`tab-btn tab-settings-btn${activeTab === 'settings' ? ' active' : ''}`}
+              onClick={() => handleTabClick('settings')}
+              title="Settings"
+            >
+              ⚙
+            </button>
+          </div>
         </div>
 
         <div className="nav-right">
@@ -110,7 +129,7 @@ function AppShell({ initialTab = 'overview' }) {
         )}
 
         {activeTab === 'research' && (
-          <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} />
+          <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} refetchOrders={refetchOrders} />
         )}
 
         {activeTab === 'sentiment' && <SentimentPage />}
@@ -134,9 +153,11 @@ function AppShell({ initialTab = 'overview' }) {
             setActiveTab={setActiveTab}
           />
         )}
+
+        {/* Settings renders via SettingsLayout's <Outlet> — populated by the Route children below */}
+        {activeTab === 'settings' && <SettingsLayout />}
       </main>
 
-      {/* Slide-over — active on all tabs except the inline Assistant tab */}
       {activeTab !== 'assistant' && (
         <AssistantPanel
           open={showAssistant}
@@ -161,7 +182,7 @@ export default function App() {
         <Route path="/research" element={<AppShell initialTab="research" />} />
         <Route path="/orders" element={<AppShell initialTab="portfolio" />} />
         <Route path="/positions" element={<AppShell initialTab="portfolio" />} />
-        <Route path="/settings" element={<SettingsLayout />}>
+        <Route path="/settings" element={<AppShell initialTab="settings" />}>
           <Route index          element={<Profile />} />
           <Route path="profile"     element={<Profile />} />
           <Route path="billing"     element={<BillingUsage />} />

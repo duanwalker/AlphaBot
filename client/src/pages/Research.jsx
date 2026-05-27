@@ -24,25 +24,47 @@ function formatPct(value) {
 }
 
 function fmt(value, prefix = '', suffix = '') {
+  if (value === 'None' || value == null) return '--';
   const n = parseFloat(value);
   if (!Number.isFinite(n)) return '--';
   return `${prefix}${n.toFixed(2)}${suffix}`;
 }
 
+function fmtStr(value) {
+  if (value == null || value === 'None' || value === '-' || value === '') return '--';
+  return value;
+}
+
 function FundamentalsGrid({ symbol }) {
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);  // start loading — there is always a default symbol
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     if (!symbol) return;
+
+    console.log('[DEBUG] Fetching fundamentals for:', symbol);
+    console.log('[DEBUG] symbol at fetch time:', symbol);
+
     let cancelled = false;
     setLoading(true);
     setData(null);
+    setFetchError(null);
 
     fetch(`/api/fundamentals/${symbol}`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .then(async r => {
+        if (!r.ok) throw new Error(`Fundamentals fetch failed (${r.status})`);
+        return r.json();
+      })
+      .then(d => {
+        console.log('[DEBUG] Raw response for', symbol, ':', d);
+        console.log('[DEBUG] Keys received:', Object.keys(d || {}));
+        if (!cancelled) setData(d);
+      })
+      .catch(err => {
+        console.error('[DEBUG] Fetch error:', err);
+        if (!cancelled) setFetchError(err.message || 'Failed to load fundamentals');
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
@@ -56,6 +78,8 @@ function FundamentalsGrid({ symbol }) {
     { label: 'Beta',           value: fmt(data?.beta) },
     { label: 'Market Cap',     value: formatLargeNumber(data?.marketCap) },
     { label: 'Profit Margin',  value: formatPct(data?.profitMargin) },
+    { label: 'Sector',         value: fmtStr(data?.sector) },
+    { label: 'Industry',       value: fmtStr(data?.industry) },
   ];
 
   return (
@@ -70,6 +94,8 @@ function FundamentalsGrid({ symbol }) {
             <div key={i} className="res-fund-skeleton-cell" />
           ))}
         </div>
+      ) : fetchError ? (
+        <p className="res-fund-error">{fetchError}</p>
       ) : (
         <div className="res-fund-grid">
           {cells.map(({ label, value }) => (
@@ -111,7 +137,7 @@ function SymbolHeader({ symbol, searchResult }) {
   );
 }
 
-export default function Research({ onNavigate, setActiveSymbol: setAppSymbol }) {
+export default function Research({ onNavigate, setActiveSymbol: setAppSymbol, refetchOrders }) {
   const [inputValue, setInputValue]   = useState('');
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const { loading: searching, error: searchError, result, searchSymbol } = useSymbolSearch();
@@ -125,6 +151,7 @@ export default function Research({ onNavigate, setActiveSymbol: setAppSymbol }) 
     e.preventDefault();
     const sym = inputValue.trim().toUpperCase();
     if (!sym) return;
+    console.log('[DEBUG] setSymbol called with:', sym);
     setActiveSymbol(sym);
     searchSymbol(sym);
   }
@@ -179,6 +206,7 @@ export default function Research({ onNavigate, setActiveSymbol: setAppSymbol }) 
           symbol={activeSymbol}
           onNavigateOptions={onNavigate}
           onSetSymbol={setAppSymbol}
+          refetchOrders={refetchOrders}
         />
       </div>
     </div>

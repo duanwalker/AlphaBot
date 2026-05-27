@@ -43,7 +43,48 @@ function sgn(n) {
 
 const BAR_COLORS = ['#6366f1', '#4ade80', '#f59e0b', '#f87171', '#38bdf8', '#a78bfa', '#fb923c', '#34d399'];
 
-const ORDER_PENDING_STATUSES = new Set(['new', 'partially_filled', 'accepted', 'pending_new', 'accepted_for_bidding', 'held']);
+const PENDING_STATUSES = new Set([
+  'new',
+  'pending_new',
+  'accepted',
+  'pending_replace',
+  'held',
+  'partially_filled',
+]);
+
+const FILLED_STATUSES = new Set([
+  'filled',
+]);
+
+const CANCELLED_STATUSES = new Set([
+  'canceled',
+  'cancelled',
+  'expired',
+  'replaced',
+  'rejected',
+  'suspended',
+  'done_for_day',
+]);
+
+function getStatusDisplay(status) {
+  if (!status) {
+    return { label: '—', className: 'pf-status--default' };
+  }
+
+  if (FILLED_STATUSES.has(status)) {
+    return { label: '● Filled', className: 'pf-status--filled' };
+  }
+
+  if (PENDING_STATUSES.has(status)) {
+    return { label: '◌ Pending', className: 'pf-status--pending' };
+  }
+
+  if (CANCELLED_STATUSES.has(status)) {
+    return { label: '✕ Cancelled', className: 'pf-status--cancelled' };
+  }
+
+  return { label: status, className: 'pf-status--default' };
+}
 
 export default function Portfolio({ account, positions, orders, loading, error, setActiveTab }) {
   const [orderFilter, setOrderFilter] = useState('all');
@@ -57,8 +98,8 @@ export default function Portfolio({ account, positions, orders, loading, error, 
   const dayPL       = equity != null && lastEquity != null ? equity - lastEquity : null;
 
   const filteredOrders = (orders ?? []).filter(o => {
-    if (orderFilter === 'filled')  return o.status === 'filled';
-    if (orderFilter === 'pending') return ORDER_PENDING_STATUSES.has(o.status);
+    if (orderFilter === 'filled') return FILLED_STATUSES.has(o.status);
+    if (orderFilter === 'pending') return PENDING_STATUSES.has(o.status);
     return true;
   });
 
@@ -245,7 +286,10 @@ export default function Portfolio({ account, positions, orders, loading, error, 
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map(o => (
+                  {filteredOrders.map(o => {
+                    const { label, className } = getStatusDisplay(o.status);
+
+                    return (
                     <tr key={o.id}>
                       <td>{o.symbol || '—'}</td>
                       <td className={o.side === 'buy' ? 'pl-pos' : 'pl-neg'}>
@@ -253,23 +297,10 @@ export default function Portfolio({ account, positions, orders, loading, error, 
                       </td>
                       <td>{o.qty ?? '—'}</td>
                       <td>
-                        <span className={`pf-status pf-status--${
-                          o.status === 'filled'                                    ? 'filled'    :
-                          o.status === 'canceled' || o.status === 'cancelled'      ? 'cancelled' :
-                          o.status === 'new' || o.status === 'pending_new' ||
-                          o.status === 'accepted' || o.status === 'held' ||
-                          o.status === 'partially_filled'                          ? 'pending'   :
-                          'default'
-                        }`}>
-                          {o.status === 'filled'                               ? '● Filled'    :
-                           o.status === 'canceled' || o.status === 'cancelled' ? '✕ Cancelled' :
-                           o.status === 'new' || o.status === 'pending_new'    ? '◌ Pending'   :
-                           o.status === 'partially_filled'                     ? '◑ Partial'   :
-                           o.status || '—'}
-                        </span>
+                        <span className={`pf-status ${className}`}>{label}</span>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
