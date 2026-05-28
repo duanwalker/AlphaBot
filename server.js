@@ -9,6 +9,8 @@ import dotenv from "dotenv";
 import authMiddleware from "./middleware/auth.js";
 import searchRoutes from "./routes/search.js";
 import sentimentRoutes from "./routes/sentiment.js";
+import userProfileRoutes from "./routes/userProfile.js";
+import { getUserProfile } from "./services/userProfileDb.js";
 import { startSentimentScheduler } from "./services/sentimentScheduler.js";
 import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
 import {
@@ -70,6 +72,7 @@ app.use(authMiddleware);
 // Search route
 app.use("/api/search", searchRoutes);
 app.use("/api/sentiment", sentimentRoutes);
+app.use("/api/user/profile", userProfileRoutes);
 
 // ─────────────────────────────────────────────────────────────
 // Sentiment Scheduler
@@ -97,6 +100,15 @@ app.post("/api/assistant", async (req, res) => {
     // Resolve context — UI symbol wins, message inference is fallback
     const resolved = resolveContext(context.symbol, message);
     console.log('[CONTEXT]', resolved.mode, '|', resolved.symbol || 'no symbol');
+
+    // Load user strategy profile (non-blocking — absence is fine)
+    let userProfile = null;
+    try {
+      userProfile = await getUserProfile(userId, tenantId);
+    } catch (err) {
+      console.warn('[ASSISTANT] Could not load user profile:', err.message);
+    }
+
     let account = context.account ? attachEntityScope(context.account, req.user) : null;
     let positions = Array.isArray(context.positions)
       ? attachEntityScopeList(context.positions, req.user)
@@ -716,12 +728,22 @@ app.post("/api/assistant", async (req, res) => {
 
       userId,
       tenantId,
+
+      userStrategyProfile: userProfile?.strategyProfile
+        ? {
+            riskLevel:             userProfile.strategyProfile.riskLevel,
+            primaryGoal:           userProfile.strategyProfile.primaryGoal,
+            timeHorizon:           userProfile.strategyProfile.timeHorizon,
+            recommendedStrategies: userProfile.strategyProfile.recommendedStrategies,
+            claudeAnalysis:        userProfile.strategyProfile.claudeAnalysis,
+          }
+        : null,
     };
 
 
     const systemPrompt = resolved.mode === 'single'
-      ? getSingleSymbolPrompt(resolved.symbol)
-      : getMarketPrompt();
+      ? getSingleSymbolPrompt(resolved.symbol, userProfile?.strategyProfile)
+      : getMarketPrompt(userProfile?.strategyProfile);
 
     const primaryModel = "claude-haiku-4-5-20251001";
     const fallbackModel = "claude-sonnet-4-6";

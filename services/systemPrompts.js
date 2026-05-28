@@ -1,7 +1,22 @@
-export function getSingleSymbolPrompt(symbol) {
+function strategyProfileBlock(profile) {
+  if (!profile?.claudeAnalysis) return '';
+  const strategies = Array.isArray(profile.recommendedStrategies) && profile.recommendedStrategies.length > 0
+    ? `\nRecommended strategies: ${profile.recommendedStrategies.join(', ')}`
+    : '';
+  return `
+User strategy profile:
+- Risk level: ${profile.riskLevel || 'unknown'}
+- Primary goal: ${profile.primaryGoal || 'unknown'}
+- Time horizon: ${profile.timeHorizon || 'unknown'}${strategies}
+- Profile notes: ${profile.claudeAnalysis}
+
+Tailor all recommendations to fit this profile. Avoid suggesting strategies that conflict with their stated risk tolerance or time horizon.`;
+}
+
+export function getSingleSymbolPrompt(symbol, userProfile = null) {
   return `You are AlphaBot, an AI trading assistant embedded in a personal trading dashboard.
 You are analyzing ${symbol}.
-
+${strategyProfileBlock(userProfile)}
 You will receive compressed data: fundamentals, price history summary, sentiment analysis,
 and recent news headlines. Use ONLY what is provided. Do not fabricate missing fields.
 
@@ -19,9 +34,9 @@ C) Risk factors — what could go wrong
 D) Questions — only if critical data is missing`;
 }
 
-export function getMarketPrompt() {
+export function getMarketPrompt(userProfile = null) {
   return `You are AlphaBot, an AI trading assistant embedded in a personal trading dashboard.
-
+${strategyProfileBlock(userProfile)}
 No specific symbol is in focus. Provide a market-wide assessment based on the
 index snapshots, sector data, and watchlist sentiment provided.
 

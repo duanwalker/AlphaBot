@@ -1,7 +1,9 @@
 import "./App.css";
 import useAlpaca from "./hooks/useAlpaca";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { getUserProfile } from "./services/userProfileApi";
+import OnboardingModal from "./components/OnboardingModal";
 
 import AssistantPanel from "./components/AssistantPanel";
 import AssistantPage from "./pages/Assistant";
@@ -37,6 +39,19 @@ function AppShell({ initialTab = 'overview' }) {
   const [marketSnapshot, setMarketSnapshot] = useState(null);
   const [activeSymbol, setActiveSymbol]     = useState(null);
   const [externalPrompt, setExternalPrompt] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    getUserProfile()
+      .then((profile) => {
+        if (!profile || (!profile.onboardingCompleted && !profile.onboardingSkipped)) {
+          setShowOnboarding(true);
+        }
+      })
+      .catch(() => {
+        // non-fatal — skip onboarding check if profile service is unavailable
+      });
+  }, []);
 
   const handleTabClick = (tab) => {
     if (tab === 'settings') {
@@ -168,6 +183,13 @@ function AppShell({ initialTab = 'overview' }) {
           marketSnapshot={marketSnapshot}
           symbol={activeSymbol}
           externalPrompt={externalPrompt}
+        />
+      )}
+
+      {showOnboarding && (
+        <OnboardingModal
+          onComplete={() => setShowOnboarding(false)}
+          onSkip={() => setShowOnboarding(false)}
         />
       )}
     </div>
