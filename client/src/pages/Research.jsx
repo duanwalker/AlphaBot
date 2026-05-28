@@ -76,7 +76,16 @@ function FundamentalsGrid({ symbol }) {
     return () => { cancelled = true; };
   }, [symbol]);
 
-  const cells = [
+  const isETF = data?.assetType === 'ETF';
+
+  const cells = isETF ? [
+    { label: 'Type',       value: 'ETF / Fund' },
+    { label: '52W High',   value: fmt(data?.week52High, '$') },
+    { label: '52W Low',    value: fmt(data?.week52Low, '$') },
+    { label: 'Market Cap', value: formatLargeNumber(data?.marketCap) },
+    { label: 'Sector',     value: fmtStr(data?.sector) },
+    { label: 'Industry',   value: fmtStr(data?.industry) },
+  ] : [
     { label: 'P/E Ratio',      value: fmt(data?.peRatio) },
     { label: 'EPS',            value: fmt(data?.eps, '$') },
     { label: '52W High',       value: fmt(data?.week52High, '$') },

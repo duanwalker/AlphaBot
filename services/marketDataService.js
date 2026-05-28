@@ -84,6 +84,37 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
       return null;
     }
 
+    const assetType = details.type || 'CS';
+    const isETF = assetType === 'ETF' || assetType === 'ETV' || assetType === 'ETN';
+
+    if (isETF) {
+      const normalized = await normalizePriceData(normalizedSymbol, userId).catch(() => ({
+        normalized52WeekHigh: null,
+        normalized52WeekLow: null,
+        normalized52WeekSource: null,
+      }));
+
+      return {
+        symbol: normalizedSymbol,
+        name: details.name || null,
+        description: details.description || null,
+        assetType: 'ETF',
+        sector: 'ETF / Fund',
+        industry: details.sic_description || 'Index Fund',
+        marketCap: details.market_cap || null,
+        peRatio: null,
+        eps: null,
+        dividendYield: null,
+        profitMargin: null,
+        beta: null,
+        week52High: normalized.normalized52WeekHigh,
+        week52Low: normalized.normalized52WeekLow,
+        normalized52WeekHigh: normalized.normalized52WeekHigh,
+        normalized52WeekLow: normalized.normalized52WeekLow,
+        normalized52WeekSource: normalized.normalized52WeekSource,
+      };
+    }
+
     // Fetch financials (EPS, revenue etc)
     const financialsUrl =
       `https://api.polygon.io/vX/reference/financials` +
@@ -169,10 +200,11 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
       console.warn('[FUNDAMENTALS] 52W normalization failed:', err.message);
     }
 
-    return {
+    const polygonResult = {
       symbol:             normalizedSymbol,
       name:               details.name || null,
       description:        details.description || null,
+      assetType:          assetType,
       sector:             details.sic_description || null,
       industry:           details.sic_description || null,
       marketCap:          details.market_cap || null,
@@ -189,6 +221,65 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
       normalized52WeekLow:    normalized.normalized52WeekLow,
       normalized52WeekSource: normalized.normalized52WeekSource,
     };
+
+    const isMissingCriticalData =
+      !polygonResult.name ||
+      (!polygonResult.marketCap && !polygonResult.eps);
+
+    if (isMissingCriticalData) {
+      console.log('[FUNDAMENTALS] Polygon incomplete for', normalizedSymbol, '— trying Alpha Vantage fallback');
+
+      try {
+        const avKey = process.env.ALPHA_VANTAGE_API_KEY;
+        const avUrl = `https://www.alphavantage.co/query` +
+          `?function=OVERVIEW&symbol=${normalizedSymbol}` +
+          `&apikey=${avKey}`;
+        const avRes = await axios.get(avUrl);
+        const avData = avRes.data;
+
+        if (avData?.Note || avData?.Information || avData?.['Error Message'] || !avData?.Symbol) {
+          console.warn('[FUNDAMENTALS] AV fallback also failed for', normalizedSymbol);
+          return polygonResult.name ? polygonResult : null;
+        }
+
+        console.log('[FUNDAMENTALS] AV fallback succeeded for', normalizedSymbol);
+
+        const avNormalized = await normalizePriceData(normalizedSymbol, userId).catch(() => ({
+          normalized52WeekHigh: null,
+          normalized52WeekLow: null,
+          normalized52WeekSource: null,
+        }));
+
+        return {
+          symbol: normalizedSymbol,
+          name: avData.Name || null,
+          description: avData.Description || null,
+          assetType: assetType,
+          sector: avData.Sector || null,
+          industry: avData.Industry || null,
+          marketCap: avData.MarketCapitalization || null,
+          peRatio: avData.PERatio || null,
+          pegRatio: avData.PEGRatio || null,
+          eps: avData.EPS || null,
+          dividendYield: avData.DividendYield || null,
+          profitMargin: avData.ProfitMargin || null,
+          analystTargetPrice: avData.AnalystTargetPrice || null,
+          revenueTTM: avData.RevenueTTM || null,
+          beta: avData.Beta || null,
+          week52High: avNormalized.normalized52WeekHigh,
+          week52Low: avNormalized.normalized52WeekLow,
+          normalized52WeekHigh: avNormalized.normalized52WeekHigh,
+          normalized52WeekLow: avNormalized.normalized52WeekLow,
+          normalized52WeekSource: avNormalized.normalized52WeekSource,
+          source: 'alpha_vantage_fallback',
+        };
+      } catch (avErr) {
+        console.warn('[FUNDAMENTALS] AV fallback error:', avErr.message);
+        return polygonResult.name ? polygonResult : null;
+      }
+    }
+
+    return polygonResult;
   });
 
   return cached ? attachEntityScope(cached, userId, tenantId) : null;
