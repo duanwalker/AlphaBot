@@ -40,18 +40,51 @@ function AppShell({ initialTab = 'overview' }) {
   const [activeSymbol, setActiveSymbol]     = useState(null);
   const [externalPrompt, setExternalPrompt] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [userProfile, setUserProfile]       = useState(null);
+
+  useEffect(() => {
+    if (showOnboarding) {
+      setShowAssistant(false);
+    }
+  }, [showOnboarding]);
 
   useEffect(() => {
     getUserProfile()
       .then((profile) => {
-        if (!profile || (!profile.onboardingCompleted && !profile.onboardingSkipped)) {
-          setShowOnboarding(true);
-        }
+        setUserProfile(profile);
+        const shouldShow = !profile ||
+          (!profile.onboardingCompleted &&
+           !profile.onboardingSkipped);
+        setShowOnboarding(shouldShow);
       })
       .catch(() => {
-        // non-fatal — skip onboarding check if profile service is unavailable
+        console.warn('[PROFILE] Profile fetch failed — skipping onboarding check');
+        setShowOnboarding(false);
+        setProfileLoading(false);
+      })
+      .finally(() => {
+        setProfileLoading(false);
       });
   }, []);
+
+  function handleOnboardingComplete(analysis) {
+    setShowOnboarding(false);
+    setUserProfile(prev => ({
+      ...prev,
+      onboardingCompleted: true,
+      onboardingSkipped: false,
+      strategyProfile: analysis,
+    }));
+  }
+
+  function handleOnboardingSkip() {
+    setShowOnboarding(false);
+    setUserProfile(prev => ({
+      ...prev,
+      onboardingSkipped: true,
+    }));
+  }
 
   const handleTabClick = (tab) => {
     if (tab === 'settings') {
@@ -186,10 +219,10 @@ function AppShell({ initialTab = 'overview' }) {
         />
       )}
 
-      {showOnboarding && (
+      {!profileLoading && showOnboarding && (
         <OnboardingModal
-          onComplete={() => setShowOnboarding(false)}
-          onSkip={() => setShowOnboarding(false)}
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
         />
       )}
     </div>

@@ -10,7 +10,13 @@ import authMiddleware from "./middleware/auth.js";
 import searchRoutes from "./routes/search.js";
 import sentimentRoutes from "./routes/sentiment.js";
 import userProfileRoutes from "./routes/userProfile.js";
-import { getUserProfile } from "./services/userProfileDb.js";
+import {
+  getUserProfile,
+  saveUserProfile,
+  markOnboardingSkipped,
+  markOnboardingCompleted,
+  updateActiveStrategies,
+} from "./services/userProfileDb.js";
 import { startSentimentScheduler } from "./services/sentimentScheduler.js";
 import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
 import {
@@ -742,8 +748,8 @@ app.post("/api/assistant", async (req, res) => {
 
 
     const systemPrompt = resolved.mode === 'single'
-      ? getSingleSymbolPrompt(resolved.symbol, userProfile?.strategyProfile)
-      : getMarketPrompt(userProfile?.strategyProfile);
+      ? getSingleSymbolPrompt(resolved.symbol, userProfile)
+      : getMarketPrompt(userProfile);
 
     const primaryModel = "claude-haiku-4-5-20251001";
     const fallbackModel = "claude-sonnet-4-6";
@@ -985,7 +991,7 @@ app.post("/api/ai/chat", async (req, res) => {
       system,
       messages,
     });
-    res.json({ content: response.content[0].text });
+    res.json({ content: response.content?.find(b => b.type === 'text')?.text });
   } catch (err) {
     console.error("Anthropic error:", err.message);
     res.status(500).json({ error: err.message });
@@ -1285,6 +1291,157 @@ app.post('/api/options/orders', async (req, res) => {
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// User Profile / Onboarding
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/profile — check onboarding state on app load
+app.get('/api/profile', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const profile = await getUserProfile(userId, tenantId);
+    res.json({ profile });
+  } catch (err) {
+    console.error('[PROFILE] GET error:', err.message);
+    res.status(500).json({ error: 'Failed to load profile' });
+  }
+});
+
+// POST /api/profile/skip
+app.post('/api/profile/skip', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    await markOnboardingSkipped(userId, tenantId);
+    res.json({ skipped: true });
+  } catch (err) {
+    console.error('[PROFILE] skip error:', err.message);
+    res.status(500).json({ error: 'Failed to save skip' });
+  }
+});
+
+// POST /api/profile/analyze — analyze questionnaire answers with Claude, return recommendations without saving
+app.post('/api/profile/analyze', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    console.log('[PROFILE] Analyzing questionnaire for:', userId);
+    const { questionnaire } = req.body;
+
+    if (!questionnaire) {
+      return res.status(400).json({ error: 'Questionnaire answers required' });
+    }
+
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      temperature: 0.3,
+      system: `You are a financial strategy advisor for AlphaBot,
+an AI-powered trading dashboard. Analyze the user's questionnaire
+answers and recommend the most appropriate investment strategies.
+
+Available strategies to recommend from:
+- wheel_strategy: Sell cash-secured puts + covered calls for income
+- covered_calls: Sell covered calls on existing stock positions
+- cash_secured_puts: Sell puts on stocks you want to own
+- index_dca: Regular dollar-cost averaging into index ETFs
+- dividend_income: Focus on dividend-paying stocks and ETFs
+- growth_investing: Long-term growth stocks and ETFs
+- options_spreads: Defined-risk options strategies (spreads)
+
+Response format — return ONLY valid JSON, no markdown, no preamble:
+{
+  "recommendedStrategies": ["strategy_id_1", "strategy_id_2"],
+  "riskLevel": <1-5 integer>,
+  "primaryGoal": "<one sentence summary>",
+  "timeHorizon": "<short summary>",
+  "claudeAnalysis": "<2-3 paragraph personalized explanation of why these strategies fit this user, what to watch for, and any important considerations for their situation>",
+  "warningFlags": ["<any concerns worth flagging>"]
+}`,
+      messages: [
+        {
+          role: 'user',
+          content: `Please analyze these questionnaire answers and recommend appropriate investment strategies:
+
+Portfolio size: ${questionnaire.portfolioSize}
+Primary goal: ${questionnaire.primaryGoal}
+Time horizon: ${questionnaire.timeHorizon}
+Risk tolerance: ${questionnaire.riskTolerance}
+Time commitment per week: ${questionnaire.timeCommitment}
+Account type: ${questionnaire.accountType}
+Options experience: ${questionnaire.optionsExperience}`,
+        },
+      ],
+    });
+
+    const raw = completion.content?.find(b => b.type === 'text')?.text || '{}';
+    let analysis;
+    try {
+      const clean = raw.replace(/```json|```/g, '').trim();
+      analysis = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('[PROFILE] Claude response parse error:', parseErr);
+      return res.status(500).json({ error: 'Failed to parse strategy analysis' });
+    }
+
+    res.json({ analysis });
+  } catch (err) {
+    console.error('[PROFILE] analyze error:', err.message);
+    res.status(500).json({ error: 'Failed to analyze profile' });
+  }
+});
+
+// POST /api/profile/complete — save completed profile after user reviews analysis
+app.post('/api/profile/complete', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const { questionnaire, strategyProfile, activeStrategies } = req.body;
+
+    if (!questionnaire || Object.keys(questionnaire).length === 0) {
+      return res.status(400).json({ error: 'questionnaire answers are required' });
+    }
+
+    if (!strategyProfile?.recommendedStrategies?.length) {
+      return res.status(400).json({ error: 'strategyProfile with recommendedStrategies is required' });
+    }
+
+    await saveUserProfile(userId, tenantId, {
+      onboardingCompleted:   true,
+      onboardingSkipped:     false,
+      onboardingCompletedAt: new Date().toISOString(),
+      questionnaire,
+      strategyProfile: {
+        ...strategyProfile,
+        generatedAt: new Date().toISOString(),
+      },
+      activeStrategies,
+    });
+
+    await markOnboardingCompleted(userId, tenantId);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PROFILE] complete error:', err.message);
+    res.status(500).json({ error: 'Failed to save profile' });
+  }
+});
+
+// PUT /api/profile/strategies — update active strategies without a full profile rewrite
+app.put('/api/profile/strategies', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const { activeStrategies } = req.body;
+
+    if (!Array.isArray(activeStrategies)) {
+      return res.status(400).json({ error: 'activeStrategies must be an array' });
+    }
+
+    await updateActiveStrategies(userId, tenantId, activeStrategies);
+    res.json({ success: true, activeStrategies });
+  } catch (err) {
+    console.error('[PROFILE] strategies error:', err.message);
+    res.status(500).json({ error: 'Failed to update strategies' });
   }
 });
 

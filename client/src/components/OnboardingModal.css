@@ -1,0 +1,343 @@
+/* ── Overlay ── */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  pointer-events: all;
+}
+
+/* ── Modal card ── */
+.onboarding-modal {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 16px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  pointer-events: all;
+  position: relative;
+}
+
+/* ── Header ── */
+.onboarding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+}
+
+.onboarding-logo {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e5e7eb;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-x {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.onboarding-x:hover {
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Progress bar ── */
+.onboarding-progress-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 24px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.onboarding-progress-fill {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ── Skip confirm ── */
+.onboarding-skip-confirm {
+  padding: 24px;
+  flex: 1;
+}
+
+.onboarding-skip-confirm h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #e5e7eb;
+  margin: 0 0 12px;
+}
+
+.onboarding-skip-confirm p {
+  font-size: 14px;
+  color: #9ca3af;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.onboarding-skip-note {
+  font-size: 12px !important;
+  color: #6b7280 !important;
+}
+
+.onboarding-skip-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* ── Screen content ── */
+.onboarding-screen {
+  padding: 20px 24px 28px;
+  flex: 1;
+}
+
+.onboarding-screen h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e5e7eb;
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.onboarding-screen p {
+  font-size: 14px;
+  color: #9ca3af;
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
+/* ── Welcome screen ── */
+.onboarding-welcome-icon {
+  font-size: 40px;
+  margin-bottom: 16px;
+}
+
+.onboarding-time-note {
+  font-size: 13px !important;
+  color: #6b7280 !important;
+  margin-bottom: 24px !important;
+}
+
+/* ── Question screens ── */
+.onboarding-step {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.onboarding-subtitle {
+  font-size: 13px !important;
+  color: #6b7280 !important;
+  margin-bottom: 18px !important;
+}
+
+.onboarding-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-option {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  color: #d1d5db;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  width: 100%;
+}
+
+.onboarding-option:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.onboarding-option.selected {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.55);
+  color: #a5b4fc;
+  font-weight: 500;
+}
+
+.onboarding-error {
+  color: #f87171 !important;
+  font-size: 13px !important;
+  margin-top: 12px !important;
+  margin-bottom: 0 !important;
+}
+
+/* ── Analyzing screen ── */
+.onboarding-analyzing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 40px !important;
+  padding-bottom: 48px !important;
+}
+
+.onboarding-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: onboarding-spin 0.8s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes onboarding-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Results screen ── */
+.onboarding-success-icon {
+  font-size: 32px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-weight: 700;
+}
+
+.onboarding-strategy-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.onboarding-strategy-card {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #a5b4fc;
+  font-weight: 500;
+}
+
+.onboarding-analysis {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.onboarding-analysis p {
+  font-size: 13px !important;
+  color: #9ca3af !important;
+  margin: 0 !important;
+  line-height: 1.7 !important;
+}
+
+.onboarding-warnings {
+  margin-bottom: 20px;
+}
+
+.onboarding-warning {
+  font-size: 13px !important;
+  color: #f59e0b !important;
+  margin: 0 0 6px !important;
+}
+
+.onboarding-results-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* ── Shared button styles ── */
+.btn-primary {
+  background: #6366f1;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 22px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 11px 22px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 0;
+  text-align: center;
+  transition: color 0.15s;
+}
+
+.btn-text:hover {
+  color: #9ca3af;
+}
+
+.onboarding-cta {
+  width: 100%;
+  padding: 13px 22px;
+  font-size: 15px;
+}

@@ -104,8 +104,17 @@ export async function saveUserProfile(userId, tenantId = 'alpha-dev', profileDat
 
     activeStrategies: JSON.stringify(profileData.activeStrategies || []),
   };
-  await getProfileTableClient().upsertEntity(entity, 'Replace');
+  await getProfileTableClient().upsertEntity(entity, 'Merge');
   return entity;
+}
+
+export async function updateActiveStrategies(userId, tenantId = 'alpha-dev', activeStrategies) {
+  await ensureTable();
+  await getProfileTableClient().upsertEntity({
+    partitionKey: tenantId,
+    rowKey: userId,
+    activeStrategies: JSON.stringify(activeStrategies || []),
+  }, 'Merge');
 }
 
 export async function markOnboardingSkipped(userId, tenantId = 'alpha-dev') {
@@ -115,7 +124,6 @@ export async function markOnboardingSkipped(userId, tenantId = 'alpha-dev') {
     rowKey:              userId,
     onboardingSkipped:   true,
     onboardingSkippedAt: new Date().toISOString(),
-    onboardingCompleted: false,
   }, 'Merge');
 }
 

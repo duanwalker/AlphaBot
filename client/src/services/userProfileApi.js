@@ -13,12 +13,12 @@ async function requestJson(path, options) {
 }
 
 export async function getUserProfile() {
-  const data = await requestJson('/api/user/profile');
+  const data = await requestJson('/api/profile');
   return data?.profile ?? null;
 }
 
 export async function analyzeProfile(questionnaire) {
-  const data = await requestJson('/api/user/profile/analyze', {
+  const data = await requestJson('/api/profile/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ questionnaire }),
@@ -27,5 +27,5 @@ export async function analyzeProfile(questionnaire) {
 }
 
 export async function skipOnboarding() {
-  return requestJson('/api/user/profile/skip', { method: 'POST' });
+  return requestJson('/api/profile/skip', { method: 'POST' });
 }

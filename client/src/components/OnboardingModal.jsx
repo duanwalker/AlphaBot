@@ -1,352 +1,320 @@
 import { useState } from 'react';
-import { analyzeProfile, skipOnboarding } from '../services/userProfileApi';
+import './OnboardingModal.css';
 
-const STEPS = [
+const QUESTIONS = [
   {
-    key: 'portfolioSize',
-    title: 'How large is your portfolio?',
+    id: 'portfolioSize',
+    screen: 2,
+    title: 'What is your approximate portfolio size?',
+    subtitle: 'This helps AlphaBot suggest appropriate position sizes.',
     options: [
-      { value: 'under_10k',   label: 'Under $10K' },
-      { value: '10k_50k',     label: '$10K – $50K' },
-      { value: '50k_250k',    label: '$50K – $250K' },
-      { value: 'over_250k',   label: 'Over $250K' },
-    ],
+      { value: 'under_10k',    label: 'Under $10,000' },
+      { value: '10k_50k',      label: '$10,000 – $50,000' },
+      { value: '50k_250k',     label: '$50,000 – $250,000' },
+      { value: 'over_250k',    label: 'Over $250,000' },
+    ]
   },
   {
-    key: 'primaryGoal',
-    title: 'What is your primary investment goal?',
+    id: 'primaryGoal',
+    screen: 3,
+    title: 'What matters most to you?',
+    subtitle: 'AlphaBot will prioritize opportunities that match your goal.',
     options: [
-      { value: 'capital_growth',  label: 'Capital Growth' },
-      { value: 'income_dividends', label: 'Income / Dividends' },
-      { value: 'preservation',    label: 'Capital Preservation' },
-      { value: 'speculation',     label: 'Speculation / High Risk' },
-    ],
+      { value: 'income_now',   label: 'Generate income now (monthly cash flow)' },
+      { value: 'growth',       label: 'Grow wealth long term (5–20 year horizon)' },
+      { value: 'balanced',     label: 'Both — balanced approach' },
+      { value: 'preserve',     label: 'Preserve capital (low risk)' },
+    ]
   },
   {
-    key: 'timeHorizon',
-    title: 'What is your typical trade time horizon?',
+    id: 'timeHorizon',
+    screen: 4,
+    title: 'When might you need this money?',
+    subtitle: 'Your time horizon shapes which strategies make sense.',
     options: [
-      { value: 'days',   label: 'Days (swing trading)' },
-      { value: 'weeks',  label: 'Weeks' },
-      { value: 'months', label: 'Months' },
-      { value: 'years',  label: 'Years (long-term)' },
-    ],
+      { value: 'under_2y',     label: 'Within 2 years' },
+      { value: '2_5y',         label: '2 – 5 years' },
+      { value: '5_15y',        label: '5 – 15 years' },
+      { value: 'over_15y',     label: '15+ years (retirement)' },
+    ]
   },
   {
-    key: 'riskTolerance',
-    title: 'How would you describe your risk tolerance?',
+    id: 'riskTolerance',
+    screen: 5,
+    title: 'How would you react if your portfolio dropped 20% in one month?',
+    subtitle: 'Be honest — AlphaBot will use this to calibrate risk.',
     options: [
-      { value: 'conservative',    label: 'Conservative — protect capital first' },
-      { value: 'moderate',        label: 'Moderate — balanced growth' },
-      { value: 'aggressive',      label: 'Aggressive — maximize returns' },
-      { value: 'very_aggressive', label: 'Very Aggressive — high risk / high reward' },
-    ],
+      { value: 'sell',         label: 'Sell everything immediately' },
+      { value: 'hold_worried', label: 'Feel sick but hold' },
+      { value: 'hold_wait',    label: 'Hold and wait for recovery' },
+      { value: 'buy_more',     label: 'Buy more — great opportunity' },
+    ]
   },
   {
-    key: 'timeCommitment',
-    title: 'How much time can you dedicate to trading?',
+    id: 'timeCommitment',
+    screen: 6,
+    title: 'How much time can you spend managing investments per week?',
+    subtitle: 'Some strategies require more active monitoring than others.',
     options: [
-      { value: 'minimal',   label: 'Minimal — set and forget' },
-      { value: 'part_time', label: 'Part-time — a few hours/week' },
-      { value: 'active',    label: 'Active — daily check-ins' },
-      { value: 'full_time', label: 'Full-time — markets are my job' },
-    ],
+      { value: 'under_1h',     label: 'Less than 1 hour (fully passive)' },
+      { value: '1_3h',         label: '1 – 3 hours (mostly passive)' },
+      { value: '3_7h',         label: '3 – 7 hours (semi-active)' },
+      { value: 'daily',        label: 'Daily (active trader)' },
+    ]
   },
   {
-    key: 'accountType',
-    title: 'What type of account do you primarily trade in?',
+    id: 'accountType',
+    screen: 7,
+    title: 'What type of account are you using?',
+    subtitle: 'Tax treatment affects which strategies are most efficient.',
     options: [
-      { value: 'cash',   label: 'Cash account' },
-      { value: 'margin', label: 'Margin account' },
-      { value: 'ira',    label: 'IRA / retirement account' },
-      { value: 'paper',  label: 'Paper trading (practice)' },
-    ],
+      { value: 'taxable',         label: 'Taxable brokerage' },
+      { value: 'traditional_ira', label: 'Traditional IRA' },
+      { value: 'roth_ira',        label: 'Roth IRA' },
+      { value: 'multiple',        label: 'Multiple account types' },
+    ]
   },
   {
-    key: 'optionsExperience',
-    title: 'What is your experience with options?',
+    id: 'optionsExperience',
+    screen: 8,
+    title: 'What is your options trading experience?',
+    subtitle: 'AlphaBot adjusts the complexity of its recommendations.',
     options: [
-      { value: 'none',         label: 'None — I don\'t trade options' },
-      { value: 'basic',        label: 'Basic — buying calls/puts' },
-      { value: 'intermediate', label: 'Intermediate — spreads, covered calls' },
-      { value: 'advanced',     label: 'Advanced — complex strategies' },
-    ],
+      { value: 'none',       label: 'Never traded options' },
+      { value: 'bought',     label: 'Bought calls or puts before' },
+      { value: 'sold_calls', label: 'Sold covered calls' },
+      { value: 'advanced',   label: 'Full wheel strategy or spreads' },
+    ]
   },
 ];
 
+const TOTAL_SCREENS = 10; // welcome + 7 questions + analyzing + results
+
 export default function OnboardingModal({ onComplete, onSkip }) {
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [screen, setScreen]                   = useState(1);
+  const [answers, setAnswers]                 = useState({});
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+  const [analyzing, setAnalyzing]             = useState(false);
+  const [analysis, setAnalysis]               = useState(null);
+  const [error, setError]                     = useState(null);
 
-  const currentStep = STEPS[step];
-  const isLast = step === STEPS.length - 1;
-  const progress = ((step) / STEPS.length) * 100;
+  const currentQuestion = QUESTIONS.find(q => q.screen === screen);
+  const progress = Math.round((screen / TOTAL_SCREENS) * 100);
 
-  function handleSelect(value) {
-    setAnswers((prev) => ({ ...prev, [currentStep.key]: value }));
+  function handleAnswer(questionId, value) {
+    const updated = { ...answers, [questionId]: value };
+    setAnswers(updated);
+    setTimeout(() => setScreen(s => s + 1), 300);
   }
 
-  async function handleNext() {
-    if (!answers[currentStep.key]) return;
-
-    if (!isLast) {
-      setStep((s) => s + 1);
-      return;
-    }
-
-    setLoading(true);
+  async function handleAnalyze() {
+    setScreen(9);
+    setAnalyzing(true);
     setError(null);
+
     try {
-      const profile = await analyzeProfile(answers);
-      onComplete(profile);
+      const res = await fetch('/api/profile/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionnaire: answers }),
+      });
+
+      if (!res.ok) throw new Error('Analysis failed');
+      const data = await res.json();
+      setAnalysis(data.analysis);
+      setScreen(10);
     } catch (err) {
-      setError('Something went wrong. Please try again.');
+      setError('Unable to generate analysis. Please try again.');
+      setScreen(8);
     } finally {
-      setLoading(false);
+      setAnalyzing(false);
     }
   }
 
-  async function handleSkip() {
+  async function handleComplete() {
     try {
-      await skipOnboarding();
-    } catch {
-      // best-effort
+      await fetch('/api/profile/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionnaire: answers,
+          strategyProfile: analysis,
+          activeStrategies: analysis?.recommendedStrategies || [],
+        }),
+      });
+      onComplete(analysis);
+    } catch (err) {
+      setError('Failed to save profile. Please try again.');
     }
+  }
+
+  async function handleSkipConfirmed() {
+    await fetch('/api/profile/skip', { method: 'POST' });
     onSkip();
   }
 
-  const selected = answers[currentStep.key];
+  // Trigger analysis when the analyzing screen is first reached
+  if (screen === 9 && !analyzing && !analysis) {
+    handleAnalyze();
+  }
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
-        <div style={styles.header}>
-          <div style={styles.logoRow}>
-            <span style={styles.logo}>AlphaBot</span>
-            <span style={styles.badge}>Setup</span>
-          </div>
-          <p style={styles.subtitle}>
-            Let's personalize your experience — takes about 2 minutes.
-          </p>
-        </div>
+    <div className="onboarding-overlay">
+      <div className="onboarding-modal">
 
-        <div style={styles.progressBar}>
-          <div style={{ ...styles.progressFill, width: `${progress}%` }} />
-        </div>
-        <p style={styles.stepCount}>{step + 1} of {STEPS.length}</p>
-
-        <div style={styles.body}>
-          <h2 style={styles.question}>{currentStep.title}</h2>
-
-          <div style={styles.options}>
-            {currentStep.options.map((opt) => (
-              <button
-                key={opt.value}
-                style={{
-                  ...styles.option,
-                  ...(selected === opt.value ? styles.optionSelected : {}),
-                }}
-                onClick={() => handleSelect(opt.value)}
-              >
-                {selected === opt.value && <span style={styles.check}>✓ </span>}
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {error && <p style={styles.error}>{error}</p>}
-        </div>
-
-        <div style={styles.footer}>
-          <button style={styles.skipBtn} onClick={handleSkip} disabled={loading}>
-            Skip for now
-          </button>
-
-          <div style={styles.navBtns}>
-            {step > 0 && (
-              <button
-                style={styles.backBtn}
-                onClick={() => setStep((s) => s - 1)}
-                disabled={loading}
-              >
-                Back
-              </button>
-            )}
+        {/* Header */}
+        <div className="onboarding-header">
+          <div className="onboarding-logo">AlphaBot</div>
+          {!showSkipConfirm && screen < 9 && (
             <button
-              style={{
-                ...styles.nextBtn,
-                opacity: selected ? 1 : 0.4,
-              }}
-              onClick={handleNext}
-              disabled={!selected || loading}
+              className="onboarding-x"
+              onClick={() => setShowSkipConfirm(true)}
+              aria-label="Close onboarding"
             >
-              {loading
-                ? 'Analyzing...'
-                : isLast
-                  ? 'Generate My Profile'
-                  : 'Next'}
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {screen > 1 && screen < 9 && (
+          <div className="onboarding-progress-bar">
+            <div
+              className="onboarding-progress-fill"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+
+        {/* Skip confirmation */}
+        {showSkipConfirm && (
+          <div className="onboarding-skip-confirm">
+            <h3>Are you sure you want to skip setup?</h3>
+            <p>
+              AlphaBot uses your strategy profile to give personalized
+              recommendations. Without it you'll receive general advice.
+            </p>
+            <p className="onboarding-skip-note">
+              You can complete this anytime in Settings → Profile.
+            </p>
+            <div className="onboarding-skip-actions">
+              <button className="btn-secondary" onClick={handleSkipConfirmed}>
+                Complete later
+              </button>
+              <button className="btn-primary" onClick={() => setShowSkipConfirm(false)}>
+                Stay and finish
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Screen 1: Welcome */}
+        {!showSkipConfirm && screen === 1 && (
+          <div className="onboarding-screen">
+            <div className="onboarding-welcome-icon">⚡</div>
+            <h2>Welcome to AlphaBot</h2>
+            <p>
+              Let's set up your personalized strategy profile.
+              AlphaBot will use your answers to tailor its
+              recommendations, alerts, and analysis to your
+              specific goals and risk tolerance.
+            </p>
+            <p className="onboarding-time-note">Takes about 2 minutes.</p>
+            <button
+              className="btn-primary onboarding-cta"
+              onClick={() => setScreen(2)}
+            >
+              Get started →
             </button>
           </div>
-        </div>
+        )}
+
+        {/* Screens 2–8: Questions */}
+        {!showSkipConfirm && currentQuestion && (
+          <div className="onboarding-screen">
+            <div className="onboarding-step">
+              Question {screen - 1} of {QUESTIONS.length}
+            </div>
+            <h2>{currentQuestion.title}</h2>
+            <p className="onboarding-subtitle">{currentQuestion.subtitle}</p>
+            <div className="onboarding-options">
+              {currentQuestion.options.map(opt => (
+                <button
+                  key={opt.value}
+                  className={`onboarding-option${answers[currentQuestion.id] === opt.value ? ' selected' : ''}`}
+                  onClick={() => handleAnswer(currentQuestion.id, opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {error && <p className="onboarding-error">{error}</p>}
+          </div>
+        )}
+
+        {/* Screen 9: Analyzing */}
+        {!showSkipConfirm && screen === 9 && (
+          <div className="onboarding-screen onboarding-analyzing">
+            <div className="onboarding-spinner" />
+            <h2>Analyzing your profile…</h2>
+            <p>
+              AlphaBot is reviewing your answers and selecting
+              the strategies that best match your goals.
+            </p>
+          </div>
+        )}
+
+        {/* Screen 10: Results */}
+        {!showSkipConfirm && screen === 10 && analysis && (
+          <div className="onboarding-screen">
+            <div className="onboarding-success-icon">✓</div>
+            <h2>Your personalized strategy</h2>
+
+            <div className="onboarding-strategy-cards">
+              {analysis.recommendedStrategies?.map(strategy => (
+                <div key={strategy} className="onboarding-strategy-card">
+                  {formatStrategyName(strategy)}
+                </div>
+              ))}
+            </div>
+
+            <div className="onboarding-analysis">
+              <p>{analysis.claudeAnalysis}</p>
+            </div>
+
+            {analysis.warningFlags?.length > 0 && (
+              <div className="onboarding-warnings">
+                {analysis.warningFlags.map((flag, i) => (
+                  <p key={i} className="onboarding-warning">⚠ {flag}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="onboarding-results-actions">
+              <button className="btn-primary onboarding-cta" onClick={handleComplete}>
+                Start using AlphaBot →
+              </button>
+              <button className="btn-text" onClick={() => setScreen(2)}>
+                Retake questionnaire
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
 
-const styles = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.75)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  modal: {
-    background: '#0f172a',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 520,
-    margin: '0 16px',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  header: {
-    padding: '28px 28px 16px',
-  },
-  logoRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
-  logo: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#e5e7eb',
-    letterSpacing: '-0.02em',
-  },
-  badge: {
-    fontSize: 11,
-    fontWeight: 600,
-    background: 'rgba(99,102,241,0.2)',
-    color: '#818cf8',
-    border: '1px solid rgba(99,102,241,0.35)',
-    borderRadius: 6,
-    padding: '2px 8px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#9ca3af',
-    margin: 0,
-  },
-  progressBar: {
-    height: 3,
-    background: 'rgba(255,255,255,0.08)',
-    margin: '0 28px',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    background: '#6366f1',
-    borderRadius: 2,
-    transition: 'width 0.3s ease',
-  },
-  stepCount: {
-    fontSize: 12,
-    color: '#6b7280',
-    margin: '6px 28px 0',
-    textAlign: 'right',
-  },
-  body: {
-    padding: '24px 28px',
-    flexGrow: 1,
-  },
-  question: {
-    fontSize: 17,
-    fontWeight: 600,
-    color: '#e5e7eb',
-    margin: '0 0 18px',
-    lineHeight: 1.4,
-  },
-  options: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  option: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.10)',
-    borderRadius: 10,
-    padding: '12px 16px',
-    textAlign: 'left',
-    fontSize: 14,
-    color: '#d1d5db',
-    cursor: 'pointer',
-    transition: 'background 0.15s, border-color 0.15s',
-  },
-  optionSelected: {
-    background: 'rgba(99,102,241,0.15)',
-    borderColor: 'rgba(99,102,241,0.55)',
-    color: '#a5b4fc',
-    fontWeight: 500,
-  },
-  check: {
-    color: '#6366f1',
-    fontWeight: 700,
-  },
-  error: {
-    color: '#f87171',
-    fontSize: 13,
-    marginTop: 12,
-  },
-  footer: {
-    padding: '16px 28px 24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTop: '1px solid rgba(255,255,255,0.07)',
-  },
-  skipBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#6b7280',
-    fontSize: 13,
-    cursor: 'pointer',
-    padding: '8px 0',
-  },
-  navBtns: {
-    display: 'flex',
-    gap: 10,
-  },
-  backBtn: {
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 8,
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: 500,
-    padding: '10px 20px',
-    cursor: 'pointer',
-  },
-  nextBtn: {
-    background: '#6366f1',
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
-    padding: '10px 22px',
-    cursor: 'pointer',
-    transition: 'opacity 0.15s',
-  },
-};
+function formatStrategyName(id) {
+  const names = {
+    wheel_strategy:    '⚙ Wheel Strategy',
+    covered_calls:     '📈 Covered Calls',
+    cash_secured_puts: '🎯 Cash-Secured Puts',
+    index_dca:         '📊 Index Fund DCA',
+    dividend_income:   '💰 Dividend Income',
+    growth_investing:  '🚀 Growth Investing',
+    options_spreads:   '⚖ Options Spreads',
+  };
+  return names[id] || id;
+}
