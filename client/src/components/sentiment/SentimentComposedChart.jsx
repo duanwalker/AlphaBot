@@ -18,13 +18,26 @@ const DAY_OPTIONS = [30, 60, 90];
 
 function toUnitScore(entry) {
   const raw = Number(
-    entry?.averageScore ?? entry?.sentimentScore ?? entry?.score ?? entry?.value
+    entry?.sentimentScore ?? entry?.averageScore ?? entry?.score ?? entry?.value
   );
   if (!Number.isFinite(raw)) return null;
-  if (raw >= 0 && raw <= 1) return raw;
-  if (raw >= -1 && raw < 0) return (raw + 1) / 2;
-  if (raw > 1 && raw <= 100) return raw / 100;
-  return null;
+
+  // Azure stores 0-1 scale → convert to -1 to 1
+  if (raw >= 0 && raw <= 1) {
+    return (raw * 2) - 1;
+  }
+
+  // Already -1 to 1
+  if (raw >= -1 && raw < 0) {
+    return raw;
+  }
+
+  // 0-100 fallback
+  if (raw > 1 && raw <= 100) {
+    return Math.max(-1, Math.min(1, raw / 50 - 1));
+  }
+
+  return Math.max(-1, Math.min(1, raw));
 }
 
 function toDateKey(ts) {
@@ -109,7 +122,7 @@ function CustomTooltip({ active, payload, label }) {
           {entry.name === "Price"
             ? `$${Number(entry.value).toFixed(2)}`
             : entry.name === "Sentiment"
-            ? Number(entry.value).toFixed(3)
+            ? (entry.value >= 0 ? "+" : "") + Number(entry.value).toFixed(2)
             : Number(entry.value).toLocaleString()}
         </div>
       ))}
@@ -240,7 +253,8 @@ export default function SentimentComposedChart({ symbol, days, onDaysChange }) {
               <YAxis
                 yAxisId="sentiment"
                 orientation="right"
-                domain={[0, 1]}
+                domain={[-1, 1]}
+                ticks={[-1, -0.5, 0, 0.5, 1]}
                 tick={{ fill: "#64748b", fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}

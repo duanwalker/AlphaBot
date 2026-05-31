@@ -2,24 +2,27 @@ import React, { useMemo } from "react";
 import useSentimentHistory from "../../hooks/useSentimentHistory";
 
 function toUnitScore(entry) {
-  const raw = Number(entry?.averageScore ?? entry?.sentimentScore ?? entry?.score ?? entry?.value);
+  const raw = Number(entry?.sentimentScore ?? entry?.averageScore ?? entry?.score ?? entry?.value);
   if (!Number.isFinite(raw)) {
     return null;
   }
 
+  // Azure stores 0-1 scale → convert to -1 to 1
   if (raw >= 0 && raw <= 1) {
+    return (raw * 2) - 1;
+  }
+
+  // Already -1 to 1
+  if (raw >= -1 && raw < 0) {
     return raw;
   }
 
-  if (raw >= -1 && raw <= 1) {
-    return (raw + 1) / 2;
+  // 0-100 fallback
+  if (raw > 1 && raw <= 100) {
+    return Math.max(-1, Math.min(1, raw / 50 - 1));
   }
 
-  if (raw >= 0 && raw <= 100) {
-    return raw / 100;
-  }
-
-  return null;
+  return Math.max(-1, Math.min(1, raw));
 }
 
 function toTimestamp(entry) {
@@ -83,7 +86,7 @@ export default function ResearchSentimentChart({ symbol }) {
 
     const points = normalized.map((item, index) => {
       const x = left + (normalized.length > 1 ? (index / (normalized.length - 1)) * innerWidth : innerWidth / 2);
-      const y = top + (1 - item.score) * innerHeight;
+      const y = top + ((1 - item.score) / 2) * innerHeight;
       return { x, y, t: item.t };
     });
 
@@ -120,7 +123,7 @@ export default function ResearchSentimentChart({ symbol }) {
   return (
     <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", padding: 12 }}>
       <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", color: "#94a3b8", fontSize: 12 }}>
-        <span>Sentiment (0-1 normalized)</span>
+        <span>Sentiment (-1 to +1)</span>
         <span>{symbol}</span>
       </div>
 

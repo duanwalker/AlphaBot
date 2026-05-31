@@ -23,32 +23,46 @@ function toDisplayScore(value) {
     return null;
   }
 
-  if (numeric >= -1 && numeric <= 1) {
-    return (numeric + 1) * 50;
-  }
-
+  // Azure 0-1 → 0-100
   if (numeric >= 0 && numeric <= 1) {
     return numeric * 100;
   }
 
-  return numeric;
+  // Already -1 to 1 → 0-100
+  if (numeric >= -1 && numeric < 0) {
+    return (numeric + 1) * 50;
+  }
+
+  // Already 0-100
+  if (numeric > 1 && numeric <= 100) {
+    return numeric;
+  }
+
+  return Math.max(0, Math.min(100, numeric));
 }
 
 function toHistoryScore(entry) {
-  const numeric = Number(entry?.averageScore ?? entry?.sentimentScore ?? entry?.score ?? entry?.value);
+  const numeric = Number(entry?.sentimentScore ?? entry?.averageScore ?? entry?.score ?? entry?.value);
   if (!Number.isFinite(numeric)) {
     return null;
   }
 
-  if (numeric >= -1 && numeric <= 1) {
-    return (numeric + 1) * 50;
-  }
-
+  // Azure 0-1 → 0-100
   if (numeric >= 0 && numeric <= 1) {
     return numeric * 100;
   }
 
-  return numeric;
+  // Already -1 to 1 → 0-100
+  if (numeric >= -1 && numeric < 0) {
+    return (numeric + 1) * 50;
+  }
+
+  // Already 0-100
+  if (numeric > 1 && numeric <= 100) {
+    return numeric;
+  }
+
+  return Math.max(0, Math.min(100, numeric));
 }
 
 function toTimestamp(entry) {
@@ -205,7 +219,7 @@ export default function ResearchSentimentPanel({ symbol }) {
 
   const stale = useMemo(() => isSnapshotStale(latest), [latest]);
   const summary = useMemo(() => summarizeTrend(history), [history]);
-  const displayScore = useMemo(() => toDisplayScore(latest?.averageScore), [latest]);
+  const displayScore = useMemo(() => toDisplayScore(latest?.sentimentScore ?? latest?.averageScore), [latest]);
   const inWatchlist = useMemo(() => symbols.includes(normalizedSymbol), [symbols, normalizedSymbol]);
 
   const isLoading = latestLoading || historyLoading;

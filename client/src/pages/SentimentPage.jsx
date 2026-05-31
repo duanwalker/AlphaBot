@@ -33,6 +33,36 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function SentimentLegend() {
+  return (
+    <div className="sentiment-legend-card">
+      <div className="sentiment-legend-label">
+        Sentiment score
+      </div>
+
+      <div className="sentiment-legend-strip">
+        <span className="legend-strip-text left">
+          ↓ Bearish
+        </span>
+        <span className="legend-strip-text center">
+          → Neutral
+        </span>
+        <span className="legend-strip-text right">
+          ↑ Bullish
+        </span>
+      </div>
+
+      <div className="sentiment-legend-scale">
+        <span>−1.0</span>
+        <span>−0.15</span>
+        <span className="scale-zero">0</span>
+        <span>+0.15</span>
+        <span>+1.0</span>
+      </div>
+    </div>
+  );
+}
+
 function WatchlistFooter({ selectedSymbol }) {
   const { data: snapshot } = useLatestSentiment(selectedSymbol);
   const nextMinutes = getNextScheduledRunEt();
@@ -145,6 +175,8 @@ export default function SentimentPage() {
             ⓘ
           </span>
         </div>
+
+        <SentimentLegend />
 
         <div style={{ flex: 1, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
           {watchlistLoading ? (
@@ -268,6 +300,14 @@ export default function SentimentPage() {
             <div style={{ marginBottom: 14, display: "flex", alignItems: "baseline", gap: 10 }}>
               <span style={{ fontSize: 20, fontWeight: 800 }}>{selectedSymbol}</span>
               <span style={{ fontSize: 13, color: "#64748b" }}>Price vs Sentiment</span>
+            </div>
+            <div className="sentiment-legend">
+              <span className="legend-item bearish">↓ Bearish</span>
+              <span className="legend-item neutral">→ Neutral</span>
+              <span className="legend-item bullish">↑ Bullish</span>
+              <span className="legend-note">
+                Score: −1.0 (very bearish) to +1.0 (very bullish) · Neutral band: −0.15 to +0.15
+              </span>
             </div>
             <SentimentComposedChart
               symbol={selectedSymbol}

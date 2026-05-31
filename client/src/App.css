@@ -2992,3 +2992,84 @@ body::before {
   border-radius: 20px;
   color: var(--color-text-primary);
 }
+
+/* ====== SENTIMENT LEGEND ====== */
+
+.sentiment-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+.legend-item.bearish { color: var(--color-text-danger); }
+.legend-item.neutral { color: var(--color-text-secondary); }
+.legend-item.bullish { color: var(--color-text-success); }
+.legend-note {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  opacity: 0.8;
+}
+
+/* ====== SENTIMENT LEGEND CARD (watchlist panel) ====== */
+
+.sentiment-legend-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  margin-bottom: 8px;
+}
+
+.sentiment-legend-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.sentiment-legend-strip {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    #f87171 0%,
+    #475569 40%,
+    #475569 60%,
+    #4ade80 100%
+  );
+}
+
+.legend-strip-text {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+.legend-strip-text.left   { left: 4px; }
+.legend-strip-text.center { left: 50%; transform: translate(-50%, -50%); }
+.legend-strip-text.right  { right: 4px; }
+
+.sentiment-legend-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.sentiment-legend-scale .scale-zero {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  opacity: 1;
+}
