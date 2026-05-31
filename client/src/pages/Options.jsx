@@ -2,19 +2,6 @@ import { useState, useEffect } from 'react';
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function parseContractSymbol(sym) {
-  // e.g. "AAPL260116C00150000" → { underlying, expiration, type, strike }
-  const m = sym.match(/^([A-Z]+)(\d{6})([CP])(\d{8})$/);
-  if (!m) return null;
-  const [, underlying, expStr, type, strikeStr] = m;
-  const year  = 2000 + parseInt(expStr.slice(0, 2), 10);
-  const month = parseInt(expStr.slice(2, 4), 10);
-  const day   = parseInt(expStr.slice(4, 6), 10);
-  const strike = parseInt(strikeStr, 10) / 1000;
-  const expiration = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  return { underlying, expiration, type, strike };
-}
-
 function fmt2(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n.toFixed(2) : '--';
@@ -52,35 +39,30 @@ function getChgClass(v) {
 }
 
 function processChain(data) {
-  const snapshots = data.snapshots || {};
   const strikeMap = {};
 
-  for (const [contractSym, snap] of Object.entries(snapshots)) {
-    const parsed = parseContractSymbol(contractSym);
-    if (!parsed) continue;
-    const { strike, type } = parsed;
+  for (const c of (data.results || [])) {
+    const strike = c.strike || 0;
+    const type = c.contractType === 'call' ? 'C' : 'P';
 
     if (!strikeMap[strike]) strikeMap[strike] = { strike, call: null, put: null };
 
-    const prevClose = snap.prevDailyBar?.c;
-    const currClose = snap.dailyBar?.c;
-
     const row = {
-      symbol:     contractSym,
-      bid:        snap.latestQuote?.bp,
-      ask:        snap.latestQuote?.ap,
-      last:       snap.latestTrade?.p,
-      chg:        currClose != null && prevClose != null ? currClose - prevClose : null,
-      chgPct:     currClose != null && prevClose ? (currClose - prevClose) / prevClose : null,
-      vol:        snap.dailyBar?.v,
-      oi:         snap.openInterest,
-      iv:         snap.impliedVolatility,
-      delta:      snap.greeks?.delta,
-      gamma:      snap.greeks?.gamma,
-      theta:      snap.greeks?.theta,
-      vega:       snap.greeks?.vega,
-      rho:        snap.greeks?.rho,
-      expiration: parsed.expiration,
+      symbol:     c.symbol,
+      bid:        c.bid,
+      ask:        c.ask,
+      last:       c.last,
+      chg:        null,
+      chgPct:     null,
+      vol:        c.volume,
+      oi:         c.openInterest,
+      iv:         c.impliedVolatility,
+      delta:      c.greeks?.delta ?? null,
+      gamma:      c.greeks?.gamma ?? null,
+      theta:      c.greeks?.theta ?? null,
+      vega:       c.greeks?.vega  ?? null,
+      rho:        null,
+      expiration: c.expiry,
       type,
       strikeVal:  strike,
     };
@@ -546,10 +528,9 @@ export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, 
             <div className="opt-loading">Loading chain…</div>
           ) : optionsUnavailable ? (
             <div className="opt-account-notice">
-              <div className="opt-account-notice-title">Options data unavailable for this account</div>
+              <div className="opt-account-notice-title">Options chain data unavailable for {symbol}</div>
               <div className="opt-account-notice-body">
-                Alpaca paper trading accounts require options trading to be enabled.
-                Contact Alpaca support or upgrade your account to access live options data.
+                This symbol may not have listed options, or the data is temporarily unavailable.
               </div>
             </div>
           ) : rows.length === 0 ? (

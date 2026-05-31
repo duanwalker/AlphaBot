@@ -1214,29 +1214,63 @@ app.get('/api/options/chain/:symbol', async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const expiration = req.query.expiration;
+    const polygonKey = process.env.POLYGON_API_KEY;
 
-    const url = expiration
-      ? `https://data.alpaca.markets/v1beta1/options/snapshots/${symbol}?expiration_date=${expiration}&limit=100`
-      : `https://data.alpaca.markets/v1beta1/options/snapshots/${symbol}?limit=100`;
-
-    const r = await fetch(url, {
-      headers: {
-        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
-        'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
-      },
-    });
-
-    const responseText = await r.text();
-    console.log('[OPTIONS] chain status:', r.status);
-    if (!r.ok) {
-      console.log('[OPTIONS] chain body:', responseText.slice(0, 300));
-      return res.json({ snapshots: {}, error: `Alpaca returned ${r.status}` });
+    if (!polygonKey) {
+      return res.status(500).json({
+        error: 'POLYGON_API_KEY not configured'
+      });
     }
 
-    res.json(JSON.parse(responseText));
+    let url = `https://api.polygon.io/v3/snapshot/options/${symbol}` +
+      `?apiKey=${polygonKey}&limit=250&order=asc&sort=strike_price`;
+
+    if (expiration) {
+      url += `&expiration_date=${expiration}`;
+    }
+
+    const r = await fetch(url);
+    const responseText = await r.text();
+    console.log('[OPTIONS] Polygon chain status:', r.status);
+
+    if (!r.ok) {
+      console.log('[OPTIONS] Polygon error:', responseText.slice(0, 300));
+      return res.json({
+        results: [],
+        error: `Polygon returned ${r.status}`,
+        message: 'Options data unavailable'
+      });
+    }
+
+    const data = JSON.parse(responseText);
+
+    const normalized = (data.results || []).map(c => ({
+      symbol: c.details?.ticker || '',
+      contractType: c.details?.contract_type || '',
+      strike: c.details?.strike_price || 0,
+      expiry: c.details?.expiration_date || '',
+      bid: c.last_quote?.bid || 0,
+      ask: c.last_quote?.ask || 0,
+      last: c.day?.close || 0,
+      volume: c.day?.volume || 0,
+      openInterest: c.open_interest || 0,
+      impliedVolatility: c.implied_volatility || 0,
+      greeks: {
+        delta: c.greeks?.delta || null,
+        gamma: c.greeks?.gamma || null,
+        theta: c.greeks?.theta || null,
+        vega:  c.greeks?.vega  || null,
+      },
+    }));
+
+    res.json({ results: normalized });
   } catch (e) {
     console.error('[OPTIONS] chain error:', e.message);
-    res.json({ snapshots: {}, error: e.message });
+    res.json({
+      results: [],
+      error: e.message,
+      message: 'Options data unavailable'
+    });
   }
 });
 
@@ -1244,31 +1278,40 @@ app.get('/api/options/chain/:symbol', async (req, res) => {
 app.get('/api/options/expirations/:symbol', async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const r = await fetch(
-      `https://data.alpaca.markets/v1beta1/options/contracts?underlying_symbols=${symbol}&limit=50`,
-      {
-        headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
-          'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
-        },
-      }
-    );
+    const polygonKey = process.env.POLYGON_API_KEY;
 
-    const responseText = await r.text();
-    console.log('[OPTIONS] expirations status:', r.status);
-    console.log('[OPTIONS] expirations body:', responseText.slice(0, 300));
-
-    if (!r.ok) {
+    if (!polygonKey) {
       return res.json({
         expirations: [],
-        error: `Alpaca returned ${r.status}`,
-        message: 'Options data may not be available on this account',
+        error: 'POLYGON_API_KEY not configured'
       });
     }
 
-    const data = JSON.parse(responseText);
+    const url =
+      `https://api.polygon.io/v3/reference/options/contracts` +
+      `?underlying_ticker=${symbol}` +
+      `&apiKey=${polygonKey}` +
+      `&limit=1000&expired=false` +
+      `&order=asc&sort=expiration_date`;
+
+    const r = await fetch(url);
+
+    if (!r.ok) {
+      const text = await r.text();
+      console.log('[OPTIONS] Polygon expirations error:', text.slice(0, 300));
+      return res.json({
+        expirations: [],
+        error: `Polygon returned ${r.status}`,
+        message: 'Options data unavailable'
+      });
+    }
+
+    const data = await r.json();
+
     const expirations = [...new Set(
-      (data.option_contracts || []).map(c => c.expiration_date)
+      (data.results || [])
+        .map(c => c.expiration_date)
+        .filter(Boolean)
     )].sort();
 
     res.json({ expirations });
