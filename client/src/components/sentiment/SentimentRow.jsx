@@ -4,26 +4,10 @@ import { isSnapshotStale } from "../../utils/sentimentSchedule";
 import SentimentArrow from "./SentimentArrow";
 import { addToWatchlist, getWatchlist, removeFromWatchlist } from "../../services/watchlistApi";
 import useToast from "../../hooks/useToast";
+import { readSentimentScore } from "../../utils/sentimentNormalization";
 
 const BULLISH_THRESHOLD = 0.15;
 const BEARISH_THRESHOLD = -0.15;
-
-function readSentimentScore(snapshot) {
-  const raw = Number(snapshot?.averageScore ?? snapshot?.score);
-  if (!Number.isFinite(raw)) {
-    return null;
-  }
-
-  if (raw >= -1 && raw <= 1) {
-    return raw;
-  }
-
-  if (raw >= 0 && raw <= 100) {
-    return Math.max(-1, Math.min(1, raw / 50 - 1));
-  }
-
-  return Math.max(-1, Math.min(1, raw));
-}
 
 function formatUpdated(timestamp) {
   if (!timestamp) {

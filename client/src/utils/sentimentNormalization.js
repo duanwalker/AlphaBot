@@ -6,20 +6,29 @@ function clamp(value, min, max) {
 }
 
 export function readSentimentScore(snapshot) {
-  const raw = Number(snapshot?.averageScore ?? snapshot?.score);
-  if (!Number.isFinite(raw)) {
-    return null;
+  const raw = Number(
+    snapshot?.sentimentScore ??
+    snapshot?.averageScore ??
+    snapshot?.score
+  );
+  if (!Number.isFinite(raw)) return null;
+
+  // sentimentScore from Azure agent is 0-1 scale; convert to -1 to 1 for display
+  if (raw >= 0 && raw <= 1) {
+    return (raw * 2) - 1;
   }
 
-  if (raw >= -1 && raw <= 1) {
+  // Already on -1 to 1 scale
+  if (raw >= -1 && raw < 0) {
     return raw;
   }
 
-  if (raw >= 0 && raw <= 100) {
-    return clamp(raw / 50 - 1, -1, 1);
+  // 0-100 scale fallback
+  if (raw > 1 && raw <= 100) {
+    return Math.max(-1, Math.min(1, raw / 50 - 1));
   }
 
-  return clamp(raw, -1, 1);
+  return Math.max(-1, Math.min(1, raw));
 }
 
 export function getSentimentLabel(score) {

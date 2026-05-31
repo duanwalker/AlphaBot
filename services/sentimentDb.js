@@ -245,7 +245,7 @@ export async function getSnapshotHistory(ticker, days = 30) {
     history.push(parseDrivers(entity));
   }
 
-  history.sort((a, b) => String(b.RowKey).localeCompare(String(a.RowKey)));
+  history.sort((a, b) => String(b.rowKey).localeCompare(String(a.rowKey)));
   return history;
 }
 
@@ -254,7 +254,7 @@ export async function getLatestSnapshot(ticker) {
   if (!Array.isArray(history) || history.length === 0) {
     return null;
   }
-  return history[history.length - 1];
+  return history[0];
 }
 
 export async function getWatchList(userId) {
