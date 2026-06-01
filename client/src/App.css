@@ -841,6 +841,92 @@ body::before {
   margin: 10px 0;
 }
 
+/* ── Trading Account page ───────────────────────────────────── */
+
+.trading-mode-section {
+  max-width: 480px;
+}
+
+.trading-mode-section h3 {
+  margin: 0 0 16px 0;
+}
+
+.trading-mode-live-warning {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.trading-mode-toggle {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.trading-mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.trading-mode-btn:disabled {
+  cursor: default;
+}
+
+.trading-mode-btn.active {
+  border-color: rgba(99, 102, 241, 0.6);
+  color: var(--text-main);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.trading-mode-btn.active.live {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.trading-mode-btn:not(:disabled):not(.active):hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  color: var(--text-main);
+}
+
+.trading-mode-desc {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.trading-mode-error {
+  color: #f87171;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.trading-mode-note {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.trading-mode-loading {
+  height: 120px;
+}
+
 .settings-metrics-grid {
   margin-top: 14px;
   display: grid;

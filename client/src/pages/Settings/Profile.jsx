@@ -1,16 +1,77 @@
 import { useState, useEffect } from 'react';
-import { getUserProfile } from '../../services/userProfileApi';
+import { getUserProfile, saveUserProfile } from '../../services/userProfileApi';
 import OnboardingModal from '../../components/OnboardingModal';
 
+const ALL_STRATEGIES = [
+  // Income
+  { id: 'wheel_strategy',    name: 'Wheel Strategy',      category: 'Income',  complexity: 'Intermediate' },
+  { id: 'covered_calls',     name: 'Covered Calls',       category: 'Income',  complexity: 'Beginner' },
+  { id: 'cash_secured_puts', name: 'Cash-Secured Puts',   category: 'Income',  complexity: 'Intermediate' },
+  { id: 'iron_condor',       name: 'Iron Condor',         category: 'Income',  complexity: 'Advanced' },
+  { id: 'bull_call_spread',  name: 'Bull Call Spread',    category: 'Income',  complexity: 'Intermediate' },
+  { id: 'bear_put_spread',   name: 'Bear Put Spread',     category: 'Hedge',   complexity: 'Intermediate' },
+  { id: 'options_spreads',   name: 'Options Spreads',     category: 'Income',  complexity: 'Advanced' },
+  // Hedge
+  { id: 'protective_put',    name: 'Protective Put',      category: 'Hedge',   complexity: 'Beginner' },
+  { id: 'collar',            name: 'Collar',              category: 'Hedge',   complexity: 'Intermediate' },
+  // Growth
+  { id: 'leaps',             name: 'LEAPS',               category: 'Growth',  complexity: 'Intermediate' },
+  { id: 'straddle_strangle', name: 'Straddle / Strangle', category: 'Growth',  complexity: 'Advanced' },
+  { id: 'growth_investing',  name: 'Growth Investing',    category: 'Growth',  complexity: 'Intermediate' },
+  // Passive
+  { id: 'index_dca',         name: 'Index Fund DCA',      category: 'Passive', complexity: 'Beginner' },
+  { id: 'dividend_income',   name: 'Dividend Income',     category: 'Passive', complexity: 'Beginner' },
+];
+
+const COMPLEXITY_STYLES = {
+  Beginner:     'bg-green-100 text-green-800',
+  Intermediate: 'bg-amber-100 text-amber-800',
+  Advanced:     'bg-red-100 text-red-800',
+};
+
+const CATEGORIES = ['Income', 'Hedge', 'Growth', 'Passive'];
+
 export default function Profile() {
-  const [profile, setProfile]           = useState(undefined);
+  const [profile, setProfile]               = useState(undefined);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [formData, setFormData]             = useState({ activeStrategies: [] });
+  const [saving, setSaving]                 = useState(false);
+  const [saveMsg, setSaveMsg]               = useState(null);
 
   useEffect(() => {
     getUserProfile()
-      .then(setProfile)
+      .then(p => {
+        setProfile(p);
+        setFormData({
+          activeStrategies: p?.activeStrategies ?? p?.strategyProfile?.recommendedStrategies ?? [],
+        });
+      })
       .catch(() => setProfile(null));
   }, []);
+
+  function handleStrategyToggle(id) {
+    setFormData(prev => {
+      const current = prev.activeStrategies || [];
+      const next = current.includes(id)
+        ? current.filter(s => s !== id)
+        : [...current, id];
+      return { ...prev, activeStrategies: next };
+    });
+    setSaveMsg(null);
+  }
+
+  async function handleSaveStrategies() {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      await saveUserProfile({ activeStrategies: formData.activeStrategies });
+      setSaveMsg('Saved');
+    } catch {
+      setSaveMsg('Save failed — please try again');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleComplete() {
     setShowOnboarding(false);
@@ -84,16 +145,53 @@ export default function Profile() {
             </div>
 
             <div style={cardStyle}>
-              {(profile.activeStrategies?.length ?? sp?.recommendedStrategies?.length ?? 0) > 0 && (
-                <div style={{ ...rowStyle, alignItems: 'flex-start' }}>
+              <div style={{ ...rowStyle, alignItems: 'flex-start', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <span style={labelStyle}>Active strategies</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {(profile.activeStrategies ?? sp?.recommendedStrategies).map(s => (
-                      <span key={s} style={tagStyle}>{formatStrategyName(s)}</span>
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {saveMsg && (
+                      <span style={{ fontSize: 12, color: saveMsg === 'Saved' ? '#4ade80' : '#f87171' }}>
+                        {saveMsg}
+                      </span>
+                    )}
+                    <button
+                      style={btnSecondaryStyle}
+                      onClick={handleSaveStrategies}
+                      disabled={saving}
+                    >
+                      {saving ? 'Saving…' : 'Save strategies'}
+                    </button>
                   </div>
                 </div>
-              )}
+
+                {CATEGORIES.map(category => (
+                  <div key={category} style={{ width: '100%' }}>
+                    <h4 style={categoryHeadingStyle}>{category}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {ALL_STRATEGIES.filter(s => s.category === category).map(strategy => (
+                        <label key={strategy.id} style={strategyRowStyle}>
+                          <input
+                            type="checkbox"
+                            checked={formData.activeStrategies?.includes(strategy.id) || false}
+                            onChange={() => handleStrategyToggle(strategy.id)}
+                            style={{ marginRight: 0, flexShrink: 0, cursor: 'pointer' }}
+                          />
+                          <span style={{ flex: 1, fontSize: 13, color: '#d1d5db' }}>{strategy.name}</span>
+                          <span style={complexityBadgeStyle(strategy.complexity)}>
+                            {strategy.complexity}
+                          </span>
+                          {strategy.complexity === 'Advanced' && (
+                            <span style={{ fontSize: 11, color: '#f87171', fontStyle: 'italic' }}>
+                              Requires advanced options experience
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div style={rowStyle}>
                 <span style={labelStyle}>Risk level</span>
                 <span style={valueStyle}>{sp?.riskLevel || '—'}</span>
@@ -137,16 +235,8 @@ export default function Profile() {
 }
 
 function formatStrategyName(id) {
-  const names = {
-    wheel_strategy:    'Wheel Strategy',
-    covered_calls:     'Covered Calls',
-    cash_secured_puts: 'Cash-Secured Puts',
-    index_dca:         'Index Fund DCA',
-    dividend_income:   'Dividend Income',
-    growth_investing:  'Growth Investing',
-    options_spreads:   'Options Spreads',
-  };
-  return names[id] || id;
+  const s = ALL_STRATEGIES.find(x => x.id === id);
+  return s ? s.name : id;
 }
 
 const skeletonStyle = {
@@ -255,3 +345,35 @@ const tagStyle = {
   borderRadius: 6,
   padding: '2px 8px',
 };
+
+const categoryHeadingStyle = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: '#6b7280',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  margin: '0 0 8px',
+};
+
+const strategyRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  cursor: 'pointer',
+};
+
+function complexityBadgeStyle(complexity) {
+  const colors = {
+    Beginner:     { color: '#166534', background: '#dcfce7' },
+    Intermediate: { color: '#92400e', background: '#fef3c7' },
+    Advanced:     { color: '#991b1b', background: '#fee2e2' },
+  };
+  const c = colors[complexity] || {};
+  return {
+    fontSize: 11,
+    fontWeight: 500,
+    padding: '1px 8px',
+    borderRadius: 9999,
+    ...c,
+  };
+}

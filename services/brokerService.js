@@ -12,36 +12,60 @@
  */
 
 import { createBrokerAdapter } from "../brokers/brokerFactory.js";
+import { AlpacaAdapter } from "../brokers/AlpacaAdapter.js";
+import { getUserProfile } from "./userProfileDb.js";
+
+// --- Per-user Alpaca adapter factory --------------------------------
+
+async function createUserAlpacaAdapter(userId, tenantId) {
+  let tradingMode = 'paper';
+  try {
+    const profile = await getUserProfile(userId, tenantId);
+    tradingMode = profile?.tradingMode || 'paper';
+  } catch {
+    // safe default
+  }
+
+  if (tradingMode === 'live') {
+    return new AlpacaAdapter({
+      apiKey:    process.env.ALPACA_LIVE_API_KEY,
+      secretKey: process.env.ALPACA_LIVE_SECRET_KEY,
+      baseUrl:   process.env.ALPACA_LIVE_BASE_URL || 'https://api.alpaca.markets',
+    });
+  }
+
+  return new AlpacaAdapter();
+}
 
 // --- Alpaca ----------------------------------------------------------
 
 export async function getAlpacaAccount(userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.getAccountSummary(userId, tenantId);
 }
 
 export async function getAlpacaPositions(userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.getPositions(userId, tenantId);
 }
 
 export async function getAlpacaOrders(userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.getOrders(userId, tenantId);
 }
 
 export async function createAlpacaOrder(order, userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.placeOrder(order, userId, tenantId);
 }
 
 export async function cancelAlpacaOrder(orderId, userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.cancelOrder(orderId, userId, tenantId);
 }
 
 export async function getAlpacaQuote(symbol, userId, tenantId) {
-  const adapter = createBrokerAdapter(userId, tenantId, "alpaca");
+  const adapter = await createUserAlpacaAdapter(userId, tenantId);
   return adapter.getQuote(symbol, userId, tenantId);
 }
 

@@ -5,6 +5,7 @@ const items = [
   { to: "/settings/billing", label: "Billing & Usage" },
   { to: "/settings/api-keys", label: "API Keys" },
   { to: "/settings/preferences", label: "Preferences" },
+  { to: "/settings/trading-account", label: "Trading Account" },
   { to: "/settings/about", label: "About" },
 ];
 

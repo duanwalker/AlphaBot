@@ -29,3 +29,12 @@ export async function analyzeProfile(questionnaire) {
 export async function skipOnboarding() {
   return requestJson('/api/profile/skip', { method: 'POST' });
 }
+
+export async function saveUserProfile(updates) {
+  const data = await requestJson('/api/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  return data?.profile ?? null;
+}

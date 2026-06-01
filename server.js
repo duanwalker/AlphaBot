@@ -45,6 +45,8 @@ import {
   compressPositions,
   compressOrders,
   compressSnapshot,
+  compressSentimentContext,
+  compressSentimentForClaude,
 } from "./services/compressionService.js";
 import {
   getLatestSnapshot,
@@ -669,6 +671,10 @@ app.post("/api/assistant", async (req, res) => {
 
     const compressedAutoHistory = compressHistory(autoHistory);
     const compressedAutoSnapshot = compressSnapshot(autoSnapshot);
+    const enrichedSentiment = compressSentimentContext(autoSentiment, compressedAutoFundamentals);
+    const sentimentReliability = enrichedSentiment
+      ? { reliability: enrichedSentiment.reliability, reason: enrichedSentiment.reliabilityReason, weight: enrichedSentiment.reliabilityWeight }
+      : null;
 
     let articles = [];
     if (effectiveTicker) {
@@ -722,7 +728,7 @@ app.post("/api/assistant", async (req, res) => {
       marketMode: isMarketMode,
       marketOverview,
 
-      sentiment: autoSentiment,
+      sentiment: enrichedSentiment,
       sentimentArticles: autoSentimentArticles,
       articles: compressedArticles,
 
@@ -747,8 +753,35 @@ app.post("/api/assistant", async (req, res) => {
     };
 
 
+    const enrichedContext = {};
+    enrichedContext.marketCap = compressedAutoFundamentals?.marketCap ?? null;
+    enrichedContext.postVolume = autoSentiment?.postVolume ?? 0;
+
+    const existingPos = compressedPositions?.find?.(
+      p => p.symbol === resolved.symbol
+    ) ?? null;
+    enrichedContext.existingPosition = existingPos
+      ? {
+          qty: existingPos.qty,
+          avgCost: existingPos.avgCost,
+          marketValue: existingPos.marketValue,
+          unrealizedPL: existingPos.unrealizedPL,
+        }
+      : null;
+
+    enrichedContext.upcomingEarnings =
+      compressedAutoFundamentals?.nextEarningsDate ?? null;
+    enrichedContext.exDividendDate =
+      compressedAutoFundamentals?.exDividendDate ?? null;
+    enrichedContext.vixLevel = null;
+
+    enrichedContext.sentiment = compressSentimentForClaude(
+      autoSentiment,
+      enrichedContext.marketCap
+    );
+
     const systemPrompt = resolved.mode === 'single'
-      ? getSingleSymbolPrompt(resolved.symbol, userProfile)
+      ? getSingleSymbolPrompt(resolved.symbol, userProfile, enrichedContext)
       : getMarketPrompt(userProfile);
 
     const primaryModel = "claude-haiku-4-5-20251001";
@@ -762,8 +795,7 @@ app.post("/api/assistant", async (req, res) => {
       res.setHeader("Connection", "keep-alive");
 
       const streamParams = {
-        max_tokens: 1500,
-        temperature: 0.3,
+        max_tokens: 5000,
         system: systemPrompt,
         messages: [
           {
@@ -792,6 +824,9 @@ app.post("/api/assistant", async (req, res) => {
 
         const final = await stream.finalMessage();
         console.log("Final message:", final);
+        if (final.stop_reason !== 'end_turn') {
+          console.warn(`[assistant] Stream stopped early: stop_reason=${final.stop_reason}, output_tokens=${final.usage?.output_tokens}`);
+        }
         return final;
       }
 
@@ -1384,14 +1419,40 @@ app.post('/api/profile/analyze', async (req, res) => {
 an AI-powered trading dashboard. Analyze the user's questionnaire
 answers and recommend the most appropriate investment strategies.
 
-Available strategies to recommend from:
-- wheel_strategy: Sell cash-secured puts + covered calls for income
-- covered_calls: Sell covered calls on existing stock positions
-- cash_secured_puts: Sell puts on stocks you want to own
-- index_dca: Regular dollar-cost averaging into index ETFs
-- dividend_income: Focus on dividend-paying stocks and ETFs
-- growth_investing: Long-term growth stocks and ETFs
-- options_spreads: Defined-risk options strategies (spreads)
+Available strategies (recommend by ID):
+
+Income strategies:
+  wheel_strategy - Systematic CSP + CC income (intermediate)
+  covered_calls - Sell calls on owned shares (beginner)
+  cash_secured_puts - Sell puts for income/entry (intermediate)
+  iron_condor - Range-bound premium selling (advanced)
+  bull_call_spread - Defined risk bullish spread (intermediate)
+  bear_put_spread - Defined risk bearish/hedge (intermediate)
+  options_spreads - General spread strategies (advanced)
+
+Hedge strategies:
+  protective_put - Insurance on owned shares (beginner)
+  collar - Cap risk and upside on position (intermediate)
+
+Growth strategies:
+  leaps - Long-dated leveraged calls (intermediate)
+  straddle_strangle - Volatility plays (advanced)
+  growth_investing - Long-term growth stocks (intermediate)
+
+Passive strategies:
+  index_dca - Regular index ETF purchases (beginner)
+  dividend_income - Dividend stock portfolio (beginner)
+
+Matching rules:
+  - Beginner experience → only beginner strategies
+  - Intermediate experience → beginner + intermediate
+  - Advanced experience → all strategies
+  - Short time horizon (<2yr) → income/hedge focus
+  - Long time horizon (15yr+) → passive/growth focus
+  - Low risk tolerance → passive + protective strategies
+  - High risk tolerance → growth + advanced strategies
+  - Small portfolio (<$10k) → avoid strategies requiring
+    large capital (iron condor, wheel on expensive stocks)
 
 Response format — return ONLY valid JSON, no markdown, no preamble:
 {
@@ -1485,6 +1546,47 @@ app.put('/api/profile/strategies', async (req, res) => {
   } catch (err) {
     console.error('[PROFILE] strategies error:', err.message);
     res.status(500).json({ error: 'Failed to update strategies' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Trading Mode Toggle
+// ─────────────────────────────────────────────────────────────
+
+app.get('/api/settings/trading-mode', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const profile = await getUserProfile(userId, tenantId);
+    const mode = profile?.tradingMode || 'paper';
+    res.json({ mode });
+  } catch (err) {
+    res.json({ mode: 'paper' });
+  }
+});
+
+app.put('/api/settings/trading-mode', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const { mode } = req.body;
+
+    if (!['paper', 'live'].includes(mode)) {
+      return res.status(400).json({ error: 'mode must be paper or live' });
+    }
+
+    if (mode === 'live') {
+      if (!process.env.ALPACA_LIVE_API_KEY || !process.env.ALPACA_LIVE_SECRET_KEY) {
+        return res.status(400).json({
+          error: 'Live account API keys not configured. Add ALPACA_LIVE_API_KEY and ALPACA_LIVE_SECRET_KEY to .env',
+        });
+      }
+    }
+
+    await saveUserProfile(userId, tenantId, { tradingMode: mode });
+    console.log(`[TRADING MODE] ${userId} switched to ${mode}`);
+    res.json({ success: true, mode });
+  } catch (err) {
+    console.error('[TRADING MODE] error:', err.message);
+    res.status(500).json({ error: 'Failed to update trading mode' });
   }
 });
 

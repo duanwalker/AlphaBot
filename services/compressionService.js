@@ -303,10 +303,118 @@ export function compressSnapshot(rawSnapshot) {
   }));
 }
 
+/**
+ * Assess how reliable social sentiment is for a given symbol based on market cap and post volume.
+ * Large caps: sentiment lags price. Small caps: sentiment can lead price.
+ * @param {number|string|null} marketCap - Market cap in dollars (e.g. 1.2e12 or "1200000000000")
+ * @param {number|string|null} postVolume - Number of posts analyzed for the sentiment reading
+ * @returns {{ reliability: string, reason: string, weight: string }}
+ */
+export function getSentimentReliability(marketCap, postVolume) {
+  const cap = parseFloat(marketCap || 0);
+  const posts = parseInt(postVolume || 0);
+
+  let reliability, reason, weight;
+
+  if (cap > 50e9) {
+    reliability = 'low';
+    reason = 'Large cap (>$50B) — social sentiment typically ' +
+             'REFLECTS price movement, not predicts it. ' +
+             'Retail traders discuss these stocks because ' +
+             'they are already moving, not before.';
+    weight = 'Use as secondary confirmation only. ' +
+             'Weight technicals and fundamentals higher.';
+  } else if (cap > 5e9) {
+    reliability = 'moderate';
+    reason = 'Mid cap ($5B-$50B) — sentiment has moderate ' +
+             'predictive value. Mixed institutional and ' +
+             'retail ownership.';
+    weight = 'Use alongside technicals and fundamentals. ' +
+             'Require high signalStrength for conviction.';
+  } else if (cap > 0) {
+    reliability = 'high';
+    reason = 'Small cap (<$5B) — sentiment has higher ' +
+             'predictive value. Retail-driven, social ' +
+             'discussion often precedes price moves.';
+    weight = 'Sentiment signal is meaningful here. ' +
+             'Combined with high signalStrength = strong signal.';
+  } else {
+    reliability = 'unknown';
+    reason = 'Market cap unavailable — cannot assess ' +
+             'sentiment reliability.';
+    weight = 'Treat sentiment signal with caution.';
+  }
+
+  if (posts > 0 && posts < 20) {
+    reliability = 'low';
+    reason += ` Only ${posts} posts analyzed — insufficient ` +
+              'data for reliable signal.';
+  }
+
+  return { reliability, reason, weight };
+}
+
+/**
+ * Enrich a sentiment object with market-cap-derived reliability metadata.
+ * @param {object|null} sentiment - Raw sentiment built in the assistant handler
+ * @param {object|null} fundamentals - Compressed fundamentals (needs marketCap field)
+ * @returns {object|null} Sentiment with reliability, reliabilityReason, reliabilityWeight added
+ */
+export function compressSentimentContext(sentiment, fundamentals) {
+  if (!sentiment) return null;
+
+  const marketCap = fundamentals?.marketCap ?? null;
+  const postVolume = sentiment?.latest?.postVolume ?? sentiment?.postVolume ?? 0;
+  const { reliability, reason, weight } = getSentimentReliability(marketCap, postVolume);
+
+  return {
+    ...sentiment,
+    reliability,
+    reliabilityReason: reason,
+    reliabilityWeight: weight,
+  };
+}
+
+/**
+ * Compress a raw sentiment snapshot into a lean payload for Claude injection.
+ * Derives reliability tier from market cap: low (>$50B), moderate ($5B-$50B), high (<$5B).
+ * @param {object|null} snapshot - Raw sentiment snapshot
+ * @param {number|string|null} marketCap - Market cap in dollars
+ * @returns {object|null} Compressed sentiment with reliability metadata
+ */
+export function compressSentimentForClaude(snapshot, marketCap = null) {
+  if (!snapshot) return null;
+
+  const score = snapshot.sentimentScore ?? snapshot.score ?? null;
+  const postVolume = snapshot.postCount ?? snapshot.totalPosts ?? null;
+
+  const cap = parseFloat(marketCap || 0);
+  let reliability = 'unknown';
+  if (cap > 50e9)      reliability = 'low';
+  else if (cap > 5e9)  reliability = 'moderate';
+  else if (cap > 0)    reliability = 'high';
+
+  return {
+    score,
+    signalStrength: snapshot.signalStrength || null,
+    trend: snapshot.trend || null,
+    agentConfidence: snapshot.agentConfidence || null,
+    bullBearRatio: snapshot.bullBearRatio || null,
+    postVolume,
+    reliability,
+    timestamp: snapshot.timestamp || null,
+    positiveDrivers: snapshot.positiveDrivers || [],
+    negativeDrivers: snapshot.negativeDrivers || [],
+  };
+}
+
 export default {
   compressFundamentals,
   compressHistory,
   compressPositions,
   compressOrders,
   compressSnapshot,
+  getSentimentReliability,
+  compressSentimentContext,
+  compressSentimentForClaude,
 };

@@ -12,6 +12,7 @@ import Profile from "./pages/Settings/Profile";
 import BillingUsage from "./pages/Settings/BillingUsage";
 import ApiKeys from "./pages/Settings/ApiKeys";
 import Preferences from "./pages/Settings/Preferences";
+import TradingAccount from "./pages/Settings/TradingAccount";
 import About from "./pages/Settings/About";
 import Research from "./pages/Research";
 import Dashboard from "./pages/Dashboard";
@@ -242,8 +243,9 @@ export default function App() {
           <Route path="profile"     element={<Profile />} />
           <Route path="billing"     element={<BillingUsage />} />
           <Route path="api-keys"    element={<ApiKeys />} />
-          <Route path="preferences" element={<Preferences />} />
-          <Route path="about"       element={<About />} />
+          <Route path="preferences"     element={<Preferences />} />
+          <Route path="trading-account" element={<TradingAccount />} />
+          <Route path="about"           element={<About />} />
         </Route>
         <Route path="*" element={<AppShell />} />
       </Routes>

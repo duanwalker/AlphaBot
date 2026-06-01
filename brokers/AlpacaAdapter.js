@@ -19,19 +19,21 @@ import {
 import { attachEntityScope, attachEntityScopeList } from "../services/entityMetadata.js";
 
 export class AlpacaAdapter extends BrokerInterface {
-  constructor() {
+  constructor(config = {}) {
     super();
-    this._baseUrl = process.env.ALPACA_BASE_URL || "https://paper-api.alpaca.markets";
-    this._dataUrl = "https://data.alpaca.markets";
+    this._baseUrl  = config.baseUrl  || process.env.ALPACA_BASE_URL  || "https://paper-api.alpaca.markets";
+    this._apiKey   = config.apiKey   || process.env.ALPACA_API_KEY;
+    this._secretKey = config.secretKey || process.env.ALPACA_SECRET_KEY;
+    this._dataUrl  = "https://data.alpaca.markets";
   }
 
   // ─── internal helpers ───────────────────────────────────────
 
   _headers(userId) {
-    void userId; // reserved for per-user credential lookup
+    void userId;
     return {
-      "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
-      "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_KEY,
+      "APCA-API-KEY-ID": this._apiKey,
+      "APCA-API-SECRET-KEY": this._secretKey,
       "Content-Type": "application/json",
     };
   }
