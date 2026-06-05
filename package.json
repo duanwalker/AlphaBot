@@ -15,7 +15,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "^0.0.0",
-    "recharts": "^2.10.0"
+    "recharts": "^2.10.0",
+    "uuid": "^14.0.0"
   },
   "scripts": {
     "frontend": "react-scripts start",
@@ -38,6 +39,12 @@
   },
   "proxy": "http://localhost:3001",
   "devDependencies": {
-    "playwright": "^1.60.0"
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.60.0",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.8"
   }
 }

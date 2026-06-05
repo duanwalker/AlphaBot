@@ -55,6 +55,18 @@ import {
 } from "./services/sentimentDb.js";
 import { resolveContext } from "./services/contextResolver.js";
 import { getSingleSymbolPrompt, getMarketPrompt } from "./services/systemPrompts.js";
+import {
+  createPosition,
+  updatePosition,
+  getOpenPositions,
+  getAllPositions,
+  createCycle,
+  updateCycle,
+  getActiveCycles,
+  getAllCycles,
+  updateMonthlyIncome,
+  getMonthlyIncome,
+} from './services/wheelDb.js';
 
 
 dotenv.config();
@@ -933,8 +945,10 @@ app.get("/api/assistant/insights", async (req, res) => {
       positions = await getAlpacaPositions(userId, tenantId);
     } catch { /* positions optional */ }
 
+    let sentimentResults = [];
+
     if (symbols.length > 0) {
-      const sentimentResults = await Promise.all(
+      sentimentResults = await Promise.all(
         symbols.map(async (symbol) => {
           try {
             const snapshot = await getLatestSnapshot(symbol);
@@ -1000,6 +1014,40 @@ app.get("/api/assistant/insights", async (req, res) => {
           timestamp: topRisk.timestamp || new Date().toISOString(),
         });
       }
+    }
+
+    // ── Wheel strategy opportunity cards ──────────────
+    try {
+      const profile = await getUserProfile(userId, tenantId);
+      const isWheelUser = profile?.activeStrategies?.includes('wheel_strategy');
+
+      if (isWheelUser) {
+        sentimentResults.forEach((snap, i) => {
+          if (!snap || !snap.symbol) return;
+
+          const ticker = symbols[i];
+
+          if (
+            snap.score >= 0.65 &&
+            snap.signalStrength === 'high' &&
+            (snap.trend === 'rising' || snap.trend === 'stable')
+          ) {
+            cards.push({
+              type:      'opportunity',
+              ticker,
+              title:     `${ticker} — wheel strategy candidate`,
+              body:      `Sentiment ${snap.score.toFixed(2)} with ` +
+                         `${snap.signalStrength} signal. ` +
+                         `Consider selling a cash-secured ` +
+                         `put below current price to collect premium.`,
+              action:    `Analyze ${ticker} for a wheel strategy entry — suggest a CSP strike and expiry`,
+              timestamp: snap.timestamp,
+            });
+          }
+        });
+      }
+    } catch (wheelInsightErr) {
+      console.warn('[INSIGHTS] wheel card generation failed:', wheelInsightErr.message);
     }
 
     res.json({ insights: cards.slice(0, 3) });
@@ -1591,6 +1639,239 @@ app.put('/api/settings/trading-mode', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Wheel Strategy Helpers
+// ─────────────────────────────────────────────────────────────
+
+function compressSentiment(data) {
+  if (!data) return null;
+  return {
+    score:      data.sentimentScore,
+    signal:     data.signalStrength,
+    trend:      data.trend,
+    bullishPct: data.bullishPercent,
+    bearishPct: data.bearishPercent,
+    postCount:  data.postCount,
+    timestamp:  data.timestamp,
+  };
+}
+
+// ── Wheel Strategy Routes ──────────────────
+
+// Group 1 — Positions
+
+app.get('/api/wheel/positions', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const positions = await getOpenPositions(userId);
+    res.json({ positions });
+  } catch (err) {
+    console.error('[WHEEL] getOpenPositions error:', err.message);
+    res.status(500).json({ error: 'Failed to get positions' });
+  }
+});
+
+app.get('/api/wheel/positions/all', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const limit = parseInt(req.query.limit) || 50;
+    const positions = await getAllPositions(userId, limit);
+    res.json({ positions });
+  } catch (err) {
+    console.error('[WHEEL] getAllPositions error:', err.message);
+    res.status(500).json({ error: 'Failed to get positions' });
+  }
+});
+
+app.post('/api/wheel/positions', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const {
+      ticker,
+      contractType,
+      strike,
+      expiry,
+      contracts,
+      premiumPerContract,
+      openPrice,
+      brokerId,
+      cycleId,
+      account,
+      notes,
+    } = req.body;
+
+    if (!ticker || !contractType || !strike || !expiry || !contracts || premiumPerContract == null) {
+      return res.status(400).json({ error: 'ticker, contractType, strike, expiry, contracts, premiumPerContract are required' });
+    }
+
+    if (!['CSP', 'CC'].includes(contractType)) {
+      return res.status(400).json({ error: 'contractType must be CSP or CC' });
+    }
+
+    const totalPremium = premiumPerContract * contracts * 100;
+    const resolvedCycleId = cycleId || `cycle_${ticker}_${Date.now()}`;
+
+    const position = await createPosition(userId, {
+      ticker,
+      contractType,
+      strike,
+      expiry,
+      contracts,
+      premiumPerContract,
+      totalPremium,
+      cycleId: resolvedCycleId,
+      openPrice,
+      brokerId,
+      account,
+      notes,
+    });
+
+    const month = new Date().toISOString().slice(0, 7);
+    await updateMonthlyIncome(userId, month, {
+      premiumCollected: totalPremium,
+      cyclesOpen: 1,
+    });
+
+    res.json({ success: true, position });
+  } catch (err) {
+    console.error('[WHEEL] createPosition error:', err.message);
+    res.status(500).json({ error: 'Failed to create position' });
+  }
+});
+
+app.put('/api/wheel/positions/:positionId', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const { positionId } = req.params;
+    const updates = { ...req.body };
+
+    if (updates.status === 'expired') {
+      updates.realizedPL = updates.totalPremium;
+      updates.closedAt = new Date().toISOString();
+    } else if (updates.status === 'closed' && updates.closePremium != null) {
+      updates.realizedPL = updates.totalPremium - updates.closePremium;
+      updates.closedAt = new Date().toISOString();
+    }
+
+    await updatePosition(userId, positionId, updates);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[WHEEL] updatePosition error:', err.message);
+    res.status(500).json({ error: 'Failed to update position' });
+  }
+});
+
+// Group 2 — Cycles
+
+app.get('/api/wheel/cycles', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const cycles = await getActiveCycles(userId);
+    res.json({ cycles });
+  } catch (err) {
+    console.error('[WHEEL] getActiveCycles error:', err.message);
+    res.status(500).json({ error: 'Failed to get cycles' });
+  }
+});
+
+app.get('/api/wheel/cycles/all', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const cycles = await getAllCycles(userId);
+    res.json({ cycles });
+  } catch (err) {
+    console.error('[WHEEL] getAllCycles error:', err.message);
+    res.status(500).json({ error: 'Failed to get cycles' });
+  }
+});
+
+// Group 3 — Income
+
+app.get('/api/wheel/income', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const months = parseInt(req.query.months) || 12;
+    const income = await getMonthlyIncome(userId, months);
+    res.json({ income });
+  } catch (err) {
+    console.error('[WHEEL] getMonthlyIncome error:', err.message);
+    res.status(500).json({ error: 'Failed to get income' });
+  }
+});
+
+// Group 4 — AI Analysis
+
+app.post('/api/wheel/analyze/:ticker', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    const ticker = req.params.ticker.toUpperCase();
+
+    const [fundResult, sentResult, posResult, profileResult, newsResult] = await Promise.allSettled([
+      getFundamentals(ticker, userId, tenantId),
+      getLatestSnapshot(ticker),
+      getOpenPositions(userId),
+      getUserProfile(userId, tenantId),
+      getMarketNews(ticker, userId, tenantId),
+    ]);
+
+    const fundamentals = fundResult.status === 'fulfilled' ? compressFundamentals(fundResult.value) : null;
+    const sentiment = sentResult.status === 'fulfilled' ? compressSentiment(sentResult.value) : null;
+    const openPositions = posResult.status === 'fulfilled' ? posResult.value : [];
+    const userProfile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+
+    const rawNews = newsResult.status === 'fulfilled' ? newsResult.value : null;
+    const compressedNews = rawNews?.feed
+      ?.slice(0, 5)
+      .map(a => ({
+        title:     a.title,
+        source:    a.source,
+        published: a.time_published,
+        summary:   a.summary?.slice(0, 300),
+        sentiment: a.overall_sentiment_label,
+        relevance: a.relevance_score,
+      })) || [];
+
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      temperature: 0.3,
+      system: `You are AlphaBot, a wheel strategy advisor.
+Analyze the provided data and give a specific wheel strategy recommendation for this ticker.
+The wheel strategy: sell cash-secured puts (CSP) below current price to collect premium. If assigned, sell covered calls (CC) above cost basis.
+Focus on: is this a good wheel candidate, suggested CSP strike and expiry, expected premium and annualized return, key risks, sentiment timing signal.
+Be specific with numbers.
+Factor in recent news sentiment and any upcoming catalysts (earnings, FDA decisions, macro events) when assessing entry timing risk.`,
+      messages: [
+        {
+          role: 'user',
+          content: `Ticker: ${ticker}
+
+Fundamentals:
+${JSON.stringify(fundamentals, null, 2)}
+
+Sentiment:
+${JSON.stringify(sentiment, null, 2)}
+
+Recent news (${compressedNews.length} articles):
+${JSON.stringify(compressedNews, null, 2)}
+
+Open Wheel Positions:
+${JSON.stringify(openPositions, null, 2)}
+
+User Strategy Profile:
+${JSON.stringify(userProfile?.strategyProfile ?? null, null, 2)}`,
+        },
+      ],
+    });
+
+    const analysis = completion.content.find((b) => b.type === 'text')?.text;
+    res.json({ ticker, analysis });
+  } catch (err) {
+    console.error('[WHEEL] analyze error:', err.message);
+    res.status(500).json({ error: 'Failed to analyze ticker' });
+  }
+});
+
 // Health Check
 // ─────────────────────────────────────────────────────────────
 

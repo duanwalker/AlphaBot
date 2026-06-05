@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import WheelTracker from '../components/WheelTracker';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -386,6 +387,7 @@ function OrderTicket({
 // ── Main Page ─────────────────────────────────────────────────
 
 export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, setShowAssistant, setExternalPrompt }) {
+  const [optionsView, setOptionsView]       = useState('chain');
   const [inputValue, setInputValue]         = useState(initialSymbol || 'AAPL');
   const [symbol, setSymbol]                 = useState(initialSymbol || 'AAPL');
   const [chainView, setChainView]           = useState('calls');
@@ -480,7 +482,31 @@ export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, 
     : null;
 
   return (
-    <div className="opt-layout">
+    <div className="opt-page">
+      {/* ── Inner tab bar ── */}
+      <div className="options-inner-tabs">
+        <button
+          className={`options-inner-tab${optionsView === 'chain' ? ' active' : ''}`}
+          onClick={() => setOptionsView('chain')}
+        >
+          Options Chain
+        </button>
+        <button
+          className={`options-inner-tab${optionsView === 'wheel' ? ' active' : ''}`}
+          onClick={() => setOptionsView('wheel')}
+        >
+          Wheel Tracker
+        </button>
+      </div>
+
+      {optionsView === 'wheel' && (
+        <div className="wheel-page-wrap">
+          <WheelTracker />
+        </div>
+      )}
+
+      {optionsView === 'chain' && (
+      <div className="opt-layout">
       {/* ── Left: chain panel ── */}
       <div className="opt-left">
         <div className="opt-search-row">
@@ -564,6 +590,8 @@ export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, 
           onSendToAlphaBot={sendToAlphaBot}
         />
       </div>
+      </div>
+      )}
     </div>
   );
 }

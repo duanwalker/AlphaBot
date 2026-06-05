@@ -3159,3 +3159,527 @@ body::before {
   color: var(--color-text-primary);
   opacity: 1;
 }
+
+/* ====================================================
+   OPTIONS PAGE — inner tab wrapper
+   ==================================================== */
+
+.opt-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+/* When opt-layout sits inside opt-page it inherits height via flex */
+.opt-page > .opt-layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.options-inner-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 24px 0;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  flex-shrink: 0;
+}
+
+.options-inner-tab {
+  padding: 7px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.options-inner-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.options-inner-tab.active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+}
+
+.wheel-page-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+/* ====================================================
+   WHEEL TRACKER
+   ==================================================== */
+
+.wheel-tracker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1100px;
+}
+
+.wheel-loading {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* ── Header ── */
+
+.wheel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wheel-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.wheel-subtitle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.wheel-add-btn {
+  padding: 8px 16px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border-info);
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.wheel-add-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+/* ── Stat cards ── */
+
+.wheel-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.wheel-stat-card {
+  padding: 16px 18px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wheel-stat-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wheel-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.wheel-stat-value.green {
+  color: var(--color-text-success);
+}
+
+.wheel-stat-sub {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+
+/* ── Inner view tabs ── */
+
+.wheel-inner-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+}
+
+.wheel-inner-tab {
+  padding: 6px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.wheel-inner-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.wheel-inner-tab.active {
+  color: var(--color-text-primary);
+  border-bottom-color: #1D9E75;
+  font-weight: 500;
+}
+
+/* ── View content area ── */
+
+.wheel-view-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Empty state ── */
+
+.wheel-empty-state {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  border: 1px dashed var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+}
+
+/* ── Section title ── */
+
+.wheel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Positions table ── */
+
+.wheel-table-wrap {
+  overflow-x: auto;
+}
+
+.wheel-positions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wheel-positions-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border-primary);
+  white-space: nowrap;
+}
+
+.wheel-positions-table td {
+  padding: 9px 10px;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wheel-positions-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wheel-col-ticker {
+  font-weight: 600;
+}
+
+.wheel-col-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Type badges (CSP / CC) ── */
+
+.wheel-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wheel-badge.csp {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--color-text-danger);
+  border: 1px solid var(--color-border-danger);
+}
+
+.wheel-badge.cc {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--color-text-success);
+  border: 1px solid var(--color-border-success);
+}
+
+/* ── Status badges ── */
+
+.wheel-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.wheel-status-badge.open {
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+}
+
+.wheel-status-badge.expired {
+  background: var(--color-background-success);
+  color: var(--color-text-success);
+}
+
+.wheel-status-badge.assigned,
+.wheel-status-badge.called-away {
+  background: var(--color-background-warning);
+  color: var(--color-text-warning);
+}
+
+.wheel-status-badge.closed {
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+}
+
+/* ── Action buttons ── */
+
+.wheel-action-btn {
+  padding: 4px 10px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border-primary);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wheel-action-btn:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.wheel-action-btn--assign {
+  border-color: var(--color-border-warning);
+  color: var(--color-text-warning);
+}
+
+.wheel-action-btn--assign:hover {
+  background: var(--color-background-warning);
+}
+
+/* ── Income chart ── */
+
+.wheel-income-chart {
+  padding: 12px 0 4px;
+}
+
+.wheel-income-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  border: 1px dashed var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+}
+
+/* ── Add position modal ── */
+
+.wheel-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.wheel-modal {
+  background: #0f172a;
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-lg);
+  width: 540px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+}
+
+.wheel-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.wheel-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.wheel-modal-close:hover {
+  color: var(--color-text-primary);
+}
+
+.wheel-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wheel-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border-tertiary);
+}
+
+.wheel-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.wheel-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wheel-form-field label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.wheel-optional {
+  opacity: 0.6;
+}
+
+.wheel-form-field input,
+.wheel-form-field select {
+  padding: 7px 10px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.wheel-form-field input:focus,
+.wheel-form-field select:focus {
+  outline: none;
+  border-color: var(--color-border-info);
+}
+
+.wheel-calc-preview {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: rgba(29, 158, 117, 0.08);
+  border: 1px solid rgba(29, 158, 117, 0.25);
+  border-radius: var(--border-radius-sm);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.wheel-calc-preview strong {
+  color: var(--color-text-success);
+}
+
+.wheel-btn-cancel {
+  padding: 8px 16px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border-primary);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wheel-btn-cancel:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.wheel-btn-save {
+  padding: 8px 18px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid rgba(29, 158, 117, 0.5);
+  background: rgba(29, 158, 117, 0.15);
+  color: var(--color-text-success);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wheel-btn-save:hover:not(:disabled) {
+  background: rgba(29, 158, 117, 0.25);
+}
+
+.wheel-btn-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wheel-positions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

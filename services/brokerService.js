@@ -122,3 +122,31 @@ export async function getMarketStatus(userId, tenantId, brokerType = "alpaca") {
   const adapter = createBrokerAdapter(userId, tenantId, brokerType);
   return adapter.getMarketStatus(userId, tenantId);
 }
+
+// --- Broker config (used by Wheel Strategy and other modules) --------
+
+export async function getBrokerConfig(userId, tenantId) {
+  let tradingMode = 'paper';
+  try {
+    const profile = await getUserProfile(userId, tenantId);
+    tradingMode = profile?.tradingMode || 'paper';
+  } catch {
+    console.warn('[BROKER] Could not read trading mode, defaulting to paper');
+  }
+
+  if (tradingMode === 'live') {
+    return {
+      apiKey:    process.env.ALPACA_LIVE_API_KEY,
+      secretKey: process.env.ALPACA_LIVE_SECRET_KEY,
+      baseUrl:   process.env.ALPACA_LIVE_BASE_URL || 'https://api.alpaca.markets',
+      mode:      'live',
+    };
+  }
+
+  return {
+    apiKey:    process.env.ALPACA_API_KEY,
+    secretKey: process.env.ALPACA_SECRET_KEY,
+    baseUrl:   process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets',
+    mode:      'paper',
+  };
+}
