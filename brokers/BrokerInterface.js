@@ -110,4 +110,39 @@ export class BrokerInterface {
   async getQuote(symbol, userId, tenantId) {
     throw new Error("BrokerInterface.getQuote() must be implemented");
   }
+
+  /**
+   * Returns available expiration dates for a symbol.
+   *
+   * @param {string} symbol - Underlying ticker e.g. 'AAPL'
+   * @returns {Promise<string[]>} Sorted array of 'YYYY-MM-DD' strings
+   */
+  // eslint-disable-next-line no-unused-vars
+  async getOptionsExpirations(symbol) {
+    throw new Error("getOptionsExpirations not implemented");
+  }
+
+  /**
+   * Returns the full options chain for a symbol and expiry.
+   *
+   * @param {string} symbol      - Underlying ticker e.g. 'AAPL'
+   * @param {string} expiration  - 'YYYY-MM-DD'
+   * @param {object} [filters]   - Optional: { type: 'call'|'put', strikeMin, strikeMax }
+   * @returns {Promise<NormalizedContract[]>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async getOptionsChain(symbol, expiration, filters = {}) {
+    throw new Error("getOptionsChain not implemented");
+  }
+
+  /**
+   * Places an options order.
+   *
+   * @param {object} order - Normalized order object
+   * @returns {Promise<OrderResult>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async placeOptionsOrder(order) {
+    throw new Error("placeOptionsOrder not implemented");
+  }
 }

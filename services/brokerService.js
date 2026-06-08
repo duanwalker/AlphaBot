@@ -125,6 +125,17 @@ export async function getMarketStatus(userId, tenantId, brokerType = "alpaca") {
 
 // --- Broker config (used by Wheel Strategy and other modules) --------
 
+/**
+ * Returns the appropriate broker adapter instance for a given user.
+ * Currently always returns AlpacaAdapter — this is where broker switching
+ * (Schwab, IBKR, etc.) will go once a broker preference field is added
+ * to the user profile.
+ */
+export async function getBrokerForUser(userId, tenantId) {
+  const config = await getBrokerConfig(userId, tenantId);
+  return new AlpacaAdapter(config);
+}
+
 export async function getBrokerConfig(userId, tenantId) {
   let tradingMode = 'paper';
   try {

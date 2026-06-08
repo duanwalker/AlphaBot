@@ -203,6 +203,173 @@ export class AlpacaAdapter extends BrokerInterface {
     return this._fetch("/v2/clock", userId);
   }
 
+  // ─── Options methods ─────────────────────────────────────────
+
+  /**
+   * Returns sorted unique expiration dates for an underlying symbol.
+   *
+   * @param {string} symbol - e.g. 'AAPL'
+   * @returns {Promise<string[]>} 'YYYY-MM-DD' strings, sorted ascending
+   */
+  async getOptionsExpirations(symbol) {
+    const today = new Date().toISOString().slice(0, 10);
+    const params = new URLSearchParams({
+      underlying_symbols: symbol,
+      status: "active",
+      limit: "10000",
+      expiration_date_gte: today,
+    });
+
+    const response = await fetch(
+      `${this._baseUrl}/v2/options/contracts?${params}`,
+      {
+        headers: {
+          "APCA-API-KEY-ID": this._apiKey,
+          "APCA-API-SECRET-KEY": this._secretKey,
+          accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Alpaca options/contracts ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    const contracts = data.option_contracts || [];
+
+    return [...new Set(contracts.map((c) => c.expiration_date).filter(Boolean))].sort();
+  }
+
+  /**
+   * Returns a normalized options chain for a symbol and expiration date.
+   *
+   * @param {string} symbol      - e.g. 'AAPL'
+   * @param {string} expiration  - 'YYYY-MM-DD'
+   * @param {object} [filters]   - { type, strikeMin, strikeMax }
+   * @returns {Promise<NormalizedContract[]>}
+   */
+  async getOptionsChain(symbol, expiration, filters = {}) {
+    if (!expiration) return [];
+    try {
+      const params = new URLSearchParams({
+        expiration_date: expiration,
+        feed: "indicative",
+        limit: "250",
+      });
+
+      if (filters.type) params.set("type", filters.type);
+      if (filters.strikeMin) params.set("strike_price_gte", filters.strikeMin);
+      if (filters.strikeMax) params.set("strike_price_lte", filters.strikeMax);
+
+      const response = await fetch(
+        `${this._dataUrl}/v1beta1/options/snapshots/${symbol}?${params}`,
+        {
+          headers: {
+            "APCA-API-KEY-ID": this._apiKey,
+            "APCA-API-SECRET-KEY": this._secretKey,
+            accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`[OPTIONS] Alpaca chain ${response.status}:`, (await response.text()).slice(0, 200));
+        return [];
+      }
+
+      const data = await response.json();
+      const snapshots = data.snapshots || {};
+
+      if (Object.keys(snapshots).length === 0) return [];
+
+      return Object.entries(snapshots).flatMap(([contractSymbol, snap]) => {
+        const match = contractSymbol.match(/^([A-Z]+)(\d{6})([CP])(\d{8})$/);
+        if (!match) return [];
+
+        const [, underlying, dateStr, typeChar, strikeStr] = match;
+        return [{
+          symbol:            contractSymbol,
+          underlying,
+          contractType:      typeChar === "C" ? "call" : "put",
+          strike:            parseInt(strikeStr, 10) / 1000,
+          expiry:            `20${dateStr.slice(0, 2)}-${dateStr.slice(2, 4)}-${dateStr.slice(4, 6)}`,
+          bid:               snap.latestQuote?.bp ?? 0,
+          ask:               snap.latestQuote?.ap ?? 0,
+          last:              snap.latestTrade?.p ?? 0,
+          volume:            snap.latestTrade?.s ?? 0,
+          openInterest:      snap.openInterest ?? 0,
+          impliedVolatility: snap.impliedVolatility ?? 0,
+          greeks: {
+            delta: snap.greeks?.delta ?? null,
+            gamma: snap.greeks?.gamma ?? null,
+            theta: snap.greeks?.theta ?? null,
+            vega:  snap.greeks?.vega  ?? null,
+          },
+        }];
+      });
+    } catch (err) {
+      console.error('[AlpacaAdapter] getOptionsChain error:', err.message, err.status ?? '');
+      return [];
+    }
+  }
+
+  /**
+   * Places a normalized options order via Alpaca.
+   *
+   * @param {object} order - { symbol, side, qty, orderType, limitPrice, timeInForce }
+   *   side values: 'buy_to_open' | 'sell_to_open' | 'buy_to_close' | 'sell_to_close'
+   * @returns {Promise<{ orderId, status, symbol, side, qty, filledAt }>}
+   */
+  async placeOptionsOrder(order) {
+    const sideMap = {
+      buy_to_open:   { side: "buy",  position_intent: "open" },
+      sell_to_open:  { side: "sell", position_intent: "open" },
+      buy_to_close:  { side: "buy",  position_intent: "close" },
+      sell_to_close: { side: "sell", position_intent: "close" },
+    };
+
+    const mapped = sideMap[order.side] || { side: order.side, position_intent: "open" };
+
+    const payload = {
+      symbol:          order.symbol,
+      qty:             order.qty.toString(),
+      side:            mapped.side,
+      type:            order.orderType,
+      time_in_force:   order.timeInForce,
+      position_intent: mapped.position_intent,
+    };
+
+    if (order.orderType === "limit") {
+      payload.limit_price = order.limitPrice.toString();
+    }
+
+    const response = await fetch(`${this._baseUrl}/v2/orders`, {
+      method: "POST",
+      headers: {
+        "APCA-API-KEY-ID": this._apiKey,
+        "APCA-API-SECRET-KEY": this._secretKey,
+        accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Alpaca order ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return {
+      orderId:  data.id,
+      status:   data.status,
+      symbol:   data.symbol,
+      side:     data.side,
+      qty:      parseFloat(data.qty),
+      filledAt: data.filled_at || null,
+    };
+  }
+
   /**
    * Latest NBBO quote for a single equity symbol.
    *

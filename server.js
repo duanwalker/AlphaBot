@@ -30,6 +30,7 @@ import {
   getOandaAccount,
   getOandaPositions,
   getOandaPrice,
+  getBrokerForUser,
 } from "./services/brokerService.js";
 import {
   getFundamentals,
@@ -97,7 +98,12 @@ app.use("/api/user/profile", userProfileRoutes);
 // ─────────────────────────────────────────────────────────────
 // Sentiment Scheduler
 // ─────────────────────────────────────────────────────────────
-startSentimentScheduler();
+try {
+  startSentimentScheduler();
+} catch (err) {
+  console.error('[STARTUP] sentimentScheduler failed to start:', err.message);
+  console.error('[STARTUP] Continuing without sentiment scheduler.');
+}
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic Client
@@ -1295,116 +1301,29 @@ app.get("/api/usage/logs", (req, res) => {
 // GET /api/options/chain/:symbol?expiration=2026-05-16
 app.get('/api/options/chain/:symbol', async (req, res) => {
   try {
+    const { id: userId, tenantId } = req.user;
     const symbol = req.params.symbol.toUpperCase();
-    const expiration = req.query.expiration;
-    const polygonKey = process.env.POLYGON_API_KEY;
-
-    if (!polygonKey) {
-      return res.status(500).json({
-        error: 'POLYGON_API_KEY not configured'
-      });
-    }
-
-    let url = `https://api.polygon.io/v3/snapshot/options/${symbol}` +
-      `?apiKey=${polygonKey}&limit=250&order=asc&sort=strike_price`;
-
-    if (expiration) {
-      url += `&expiration_date=${expiration}`;
-    }
-
-    const r = await fetch(url);
-    const responseText = await r.text();
-    console.log('[OPTIONS] Polygon chain status:', r.status);
-
-    if (!r.ok) {
-      console.log('[OPTIONS] Polygon error:', responseText.slice(0, 300));
-      return res.json({
-        results: [],
-        error: `Polygon returned ${r.status}`,
-        message: 'Options data unavailable'
-      });
-    }
-
-    const data = JSON.parse(responseText);
-
-    const normalized = (data.results || []).map(c => ({
-      symbol: c.details?.ticker || '',
-      contractType: c.details?.contract_type || '',
-      strike: c.details?.strike_price || 0,
-      expiry: c.details?.expiration_date || '',
-      bid: c.last_quote?.bid || 0,
-      ask: c.last_quote?.ask || 0,
-      last: c.day?.close || 0,
-      volume: c.day?.volume || 0,
-      openInterest: c.open_interest || 0,
-      impliedVolatility: c.implied_volatility || 0,
-      greeks: {
-        delta: c.greeks?.delta || null,
-        gamma: c.greeks?.gamma || null,
-        theta: c.greeks?.theta || null,
-        vega:  c.greeks?.vega  || null,
-      },
-    }));
-
-    res.json({ results: normalized });
+    const { expiration, type, strikeMin, strikeMax } = req.query;
+    const broker = await getBrokerForUser(userId, tenantId);
+    const results = await broker.getOptionsChain(symbol, expiration, { type, strikeMin, strikeMax });
+    res.json({ results });
   } catch (e) {
     console.error('[OPTIONS] chain error:', e.message);
-    res.json({
-      results: [],
-      error: e.message,
-      message: 'Options data unavailable'
-    });
+    res.status(500).json({ error: 'Failed to load options chain' });
   }
 });
 
 // GET /api/options/expirations/:symbol
 app.get('/api/options/expirations/:symbol', async (req, res) => {
   try {
+    const { id: userId, tenantId } = req.user;
     const symbol = req.params.symbol.toUpperCase();
-    const polygonKey = process.env.POLYGON_API_KEY;
-
-    if (!polygonKey) {
-      return res.json({
-        expirations: [],
-        error: 'POLYGON_API_KEY not configured'
-      });
-    }
-
-    const url =
-      `https://api.polygon.io/v3/reference/options/contracts` +
-      `?underlying_ticker=${symbol}` +
-      `&apiKey=${polygonKey}` +
-      `&limit=1000&expired=false` +
-      `&order=asc&sort=expiration_date`;
-
-    const r = await fetch(url);
-
-    if (!r.ok) {
-      const text = await r.text();
-      console.log('[OPTIONS] Polygon expirations error:', text.slice(0, 300));
-      return res.json({
-        expirations: [],
-        error: `Polygon returned ${r.status}`,
-        message: 'Options data unavailable'
-      });
-    }
-
-    const data = await r.json();
-
-    const expirations = [...new Set(
-      (data.results || [])
-        .map(c => c.expiration_date)
-        .filter(Boolean)
-    )].sort();
-
+    const broker = await getBrokerForUser(userId, tenantId);
+    const expirations = await broker.getOptionsExpirations(symbol);
     res.json({ expirations });
   } catch (e) {
     console.error('[OPTIONS] expirations error:', e.message);
-    res.json({
-      expirations: [],
-      error: e.message,
-      message: 'Options data unavailable',
-    });
+    res.status(500).json({ error: 'Failed to load expirations' });
   }
 });
 
