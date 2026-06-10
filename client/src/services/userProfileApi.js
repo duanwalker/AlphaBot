@@ -31,8 +31,8 @@ export async function skipOnboarding() {
 }
 
 export async function saveUserProfile(updates) {
-  const data = await requestJson('/api/profile', {
-    method: 'PATCH',
+  const data = await requestJson('/api/profile/strategies', {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   });

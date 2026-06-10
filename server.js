@@ -1332,7 +1332,8 @@ app.post('/api/options/orders', async (req, res) => {
   try {
     const { id: userId, tenantId } = req.user;
     const order = req.body;
-    const data = await createAlpacaOrder(order, userId, tenantId);
+    const broker = await getBrokerForUser(userId, tenantId);
+    const data = await broker.placeOptionsOrder(order);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });

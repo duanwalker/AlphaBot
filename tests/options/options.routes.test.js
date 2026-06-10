@@ -279,4 +279,39 @@ describe('Options routes — integration', () => {
 
     it.todo('returns 401 without a valid token (blocked by dev-stub auth middleware)');
   });
+
+  // ── POST /api/options/orders ───────────────────────────────────────────────
+
+  describe('POST /api/options/orders', () => {
+
+    it('calls broker.placeOptionsOrder with request body and returns broker response', async () => {
+      const orderPayload = {
+        symbol: 'AAPL',
+        expiration: '2026-07-18',
+        strike: 150,
+        optionType: 'call',
+        side: 'buy',
+        quantity: 1,
+        orderType: 'market',
+        timeInForce: 'day',
+      };
+      const brokerResponse = {
+        id: 'opt-order-123',
+        status: 'accepted',
+      };
+      const placeOptionsOrder = vi.fn().mockResolvedValue(brokerResponse);
+
+      brokerService.getBrokerForUser.mockResolvedValue(
+        makeMockBroker({ placeOptionsOrder }),
+      );
+
+      const res = await request(app)
+        .post('/api/options/orders')
+        .send(orderPayload);
+
+      expect(res.status).toBe(200);
+      expect(placeOptionsOrder).toHaveBeenCalledWith(orderPayload);
+      expect(res.body).toEqual(brokerResponse);
+    });
+  });
 });
