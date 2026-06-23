@@ -38,3 +38,11 @@ export async function saveUserProfile(updates) {
   });
   return data?.profile ?? null;
 }
+
+export async function deleteUserProfile() {
+  const res = await fetch('http://localhost:3001/api/profile/reset', {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Delete failed');
+  return res.json();
+}

@@ -137,3 +137,12 @@ export async function markOnboardingCompleted(userId, tenantId = 'alpha-dev') {
     onboardingSkipped:     false,
   }, 'Merge');
 }
+
+export async function deleteUserProfile(userId, tenantId = 'alpha-dev') {
+  await ensureTable();
+  try {
+    await getProfileTableClient().deleteEntity(tenantId, userId);
+  } catch (err) {
+    if (err?.statusCode !== 404) throw err;
+  }
+}

@@ -16,6 +16,7 @@ import {
   markOnboardingSkipped,
   markOnboardingCompleted,
   updateActiveStrategies,
+  deleteUserProfile,
 } from "./services/userProfileDb.js";
 import { startSentimentScheduler } from "./services/sentimentScheduler.js";
 import { attachEntityScope, attachEntityScopeList } from "./services/entityMetadata.js";
@@ -1514,6 +1515,18 @@ app.put('/api/profile/strategies', async (req, res) => {
   } catch (err) {
     console.error('[PROFILE] strategies error:', err.message);
     res.status(500).json({ error: 'Failed to update strategies' });
+  }
+});
+
+// DELETE /api/profile/reset — delete the user's strategy profile so onboarding restarts
+app.delete('/api/profile/reset', async (req, res) => {
+  try {
+    const { id: userId, tenantId } = req.user;
+    await deleteUserProfile(userId, tenantId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PROFILE] delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete profile' });
   }
 });
 

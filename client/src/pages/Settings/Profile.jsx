@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getUserProfile, saveUserProfile } from '../../services/userProfileApi';
+import { getUserProfile, saveUserProfile, deleteUserProfile } from '../../services/userProfileApi';
 import OnboardingModal from '../../components/OnboardingModal';
 
 const ALL_STRATEGIES = [
@@ -37,6 +37,8 @@ export default function Profile() {
   const [formData, setFormData]             = useState({ activeStrategies: [] });
   const [saving, setSaving]                 = useState(false);
   const [saveMsg, setSaveMsg]               = useState(null);
+  const [deleting, setDeleting]             = useState(false);
+  const [confirmReset, setConfirmReset]     = useState(false);
 
   useEffect(() => {
     getUserProfile()
@@ -81,6 +83,20 @@ export default function Profile() {
       setProfile(updated);
     } catch {
       // leave existing profile state intact
+    }
+  }
+
+  async function handleDeleteProfile() {
+    setConfirmReset(false);
+    setDeleting(true);
+    try {
+      await deleteUserProfile();
+      setProfile(null);
+      setFormData({ activeStrategies: [] });
+    } catch {
+      setSaveMsg('Failed to reset profile — please try again.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -134,15 +150,37 @@ export default function Profile() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={completeBadgeStyle}>✓ Profile complete</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button style={btnTextStyle} onClick={() => setShowOnboarding(true)}>
-                  Edit profile
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button style={btnSecondaryStyle} onClick={() => setShowOnboarding(true)}>
                   Retake questionnaire
                 </button>
+                {!confirmReset && (
+                  <button style={btnDangerStyle} onClick={() => setConfirmReset(true)} disabled={deleting}>
+                    {deleting ? 'Resetting…' : 'Reset profile'}
+                  </button>
+                )}
               </div>
             </div>
+
+            {confirmReset && (
+              <div className="rw-confirm-panel" style={{ marginTop: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--color-text-danger)' }}>
+                  Are you sure? This will delete your strategy profile and cannot be undone.
+                </span>
+                <div className="rw-confirm-actions">
+                  <button className="rw-cancel-btn" onClick={() => setConfirmReset(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="rw-confirm-btn rw-confirm-btn--sell"
+                    onClick={handleDeleteProfile}
+                    disabled={deleting}
+                  >
+                    {deleting ? 'Resetting…' : 'Confirm reset'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div style={cardStyle}>
               <div style={{ ...rowStyle, alignItems: 'flex-start', flexDirection: 'column', gap: 12 }}>
@@ -296,6 +334,17 @@ const btnSecondaryStyle = {
   border: '1px solid rgba(99,102,241,0.4)',
   borderRadius: 8,
   color: '#a5b4fc',
+  fontSize: 12,
+  fontWeight: 500,
+  padding: '5px 12px',
+  cursor: 'pointer',
+};
+
+const btnDangerStyle = {
+  background: 'rgba(239,68,68,0.12)',
+  border: '1px solid rgba(239,68,68,0.35)',
+  borderRadius: 8,
+  color: '#fca5a5',
   fontSize: 12,
   fontWeight: 500,
   padding: '5px 12px',
