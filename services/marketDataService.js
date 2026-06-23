@@ -15,36 +15,14 @@ import { attachEntityScope, attachEntityScopeList } from "./entityMetadata.js";
 import { normalizePriceData } from "./normalizePriceData.js";
 import { fetchYahooHistorical } from "./yahooHistorical.js";
 import { normalizeHistoricalData } from "./normalizeHistoricalData.js";
+import { AlpacaAdapter } from "../brokers/AlpacaAdapter.js";
+
+const sharedAdapter = new AlpacaAdapter();
 
 const DEFAULT_MARKET_SNAPSHOT_SYMBOLS = ["AAPL", "MSFT", "AMZN", "NVDA", "INTC"];
 
 async function fetchSharedAlpacaQuote(symbol) {
-  const normalizedSymbol = symbol.toUpperCase();
-  const response = await fetch(
-    `https://data.alpaca.markets/v2/stocks/${normalizedSymbol}/quotes/latest`,
-    {
-      headers: {
-        "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_KEY,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Alpaca ${response.status}: ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  const latestQuote = data.quote || data;
-
-  return {
-    symbol: normalizedSymbol,
-    ap: latestQuote.ap || latestQuote.ask_price || null,
-    bp: latestQuote.bp || latestQuote.bid_price || null,
-    ask: latestQuote.ap || latestQuote.ask_price || null,
-    bid: latestQuote.bp || latestQuote.bid_price || null,
-    timestamp: latestQuote.t || latestQuote.timestamp || null,
-  };
+  return sharedAdapter.getQuote(symbol, "shared");
 }
 
 export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
@@ -144,26 +122,10 @@ export async function getFundamentals(symbol, userId, tenantId = "alpha-dev") {
 
       // Primary: Alpaca latest quote (may be null outside market hours)
       try {
-        const quoteRes = await fetch(
-          `https://data.alpaca.markets/v2/stocks/${normalizedSymbol}/quotes/latest`,
-          {
-            headers: {
-              'APCA-API-KEY-ID': process.env.ALPACA_API_KEY,
-              'APCA-API-SECRET-KEY': process.env.ALPACA_SECRET_KEY,
-            },
-          }
-        );
-        if (quoteRes.ok) {
-          const quoteData = await quoteRes.json();
-          const raw =
-            quoteData?.quote?.ap ||
-            quoteData?.quote?.bp ||
-            quoteData?.ap ||
-            quoteData?.bp ||
-            null;
-          const parsed = parseFloat(raw);
-          if (!isNaN(parsed) && parsed > 0) price = parsed;
-        }
+        const quoteData = await sharedAdapter.getQuote(normalizedSymbol, userId);
+        const raw = quoteData?.ap ?? quoteData?.bp ?? null;
+        const parsed = parseFloat(raw);
+        if (!isNaN(parsed) && parsed > 0) price = parsed;
       } catch (err) {
         console.warn('[FUNDAMENTALS] Alpaca price fetch failed:', err.message);
       }
