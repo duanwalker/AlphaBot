@@ -1,11 +1,14 @@
 import React from "react";
 import App from "./App";
 import ToastProvider from "./components/ui/ToastProvider";
+import { TradingModeProvider } from "./context/TradingModeContext";
 
 export default function AppWithToastProvider() {
   return (
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <TradingModeProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </TradingModeProvider>
   );
 }

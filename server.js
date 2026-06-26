@@ -1095,7 +1095,13 @@ app.post("/api/ai/chat", async (req, res) => {
 app.get("/api/alpaca/account", async (req, res) => {
   try {
     const { id: userId, tenantId } = req.user;
-    const data = await getAlpacaAccount(userId, tenantId);
+    const mode = req.headers['x-trading-mode'] || null;
+    console.log('[ACCOUNT] mode from header:', mode, '| keys:',
+      mode === 'live'
+        ? process.env.ALPACA_LIVE_API_KEY?.slice(0, 8)
+        : process.env.ALPACA_API_KEY?.slice(0, 8)
+    );
+    const data = await getAlpacaAccount(userId, tenantId, mode);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1105,7 +1111,8 @@ app.get("/api/alpaca/account", async (req, res) => {
 app.get("/api/alpaca/positions", async (req, res) => {
   try {
     const { id: userId, tenantId } = req.user;
-    const data = await getAlpacaPositions(userId, tenantId);
+    const mode = req.headers['x-trading-mode'] || null;
+    const data = await getAlpacaPositions(userId, tenantId, mode);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1115,7 +1122,8 @@ app.get("/api/alpaca/positions", async (req, res) => {
 app.get("/api/alpaca/orders", async (req, res) => {
   try {
     const { id: userId, tenantId } = req.user;
-    const data = await getAlpacaOrders(userId, tenantId);
+    const mode = req.headers['x-trading-mode'] || null;
+    const data = await getAlpacaOrders(userId, tenantId, mode);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1538,7 +1546,7 @@ app.get('/api/settings/trading-mode', async (req, res) => {
   try {
     const { id: userId, tenantId } = req.user;
     const profile = await getUserProfile(userId, tenantId);
-    const mode = profile?.tradingMode || 'paper';
+    const mode = profile?.tradingMode ?? 'paper';
     res.json({ mode });
   } catch (err) {
     res.json({ mode: 'paper' });
@@ -1564,7 +1572,7 @@ app.put('/api/settings/trading-mode', async (req, res) => {
 
     await saveUserProfile(userId, tenantId, { tradingMode: mode });
     console.log(`[TRADING MODE] ${userId} switched to ${mode}`);
-    res.json({ success: true, mode });
+    res.json({ ok: true, mode });
   } catch (err) {
     console.error('[TRADING MODE] error:', err.message);
     res.status(500).json({ error: 'Failed to update trading mode' });

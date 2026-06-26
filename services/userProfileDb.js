@@ -67,6 +67,7 @@ export async function getUserProfile(userId, tenantId = 'alpha-dev') {
         generatedAt:    entity.profileGeneratedAt    || null,
       },
       activeStrategies: JSON.parse(entity.activeStrategies || '[]'),
+      tradingMode: entity.tradingMode ?? 'paper',
     };
   } catch (err) {
     if (err?.statusCode === 404) return null;
@@ -103,6 +104,8 @@ export async function saveUserProfile(userId, tenantId = 'alpha-dev', profileDat
     profileGeneratedAt: profileData.strategyProfile?.generatedAt    || null,
 
     activeStrategies: JSON.stringify(profileData.activeStrategies || []),
+
+    ...(profileData.tradingMode != null && { tradingMode: profileData.tradingMode }),
   };
   await getProfileTableClient().upsertEntity(entity, 'Merge');
   return entity;

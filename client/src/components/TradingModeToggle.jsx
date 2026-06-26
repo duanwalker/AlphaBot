@@ -1,24 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useTradingMode } from '../context/TradingModeContext';
 
 function TradingModeToggle() {
-  const [mode, setMode]               = useState('paper');
-  const [loading, setLoading]         = useState(true);
+  const { tradingMode: mode, modeLoading: loading, updateTradingMode } = useTradingMode();
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/settings/trading-mode')
-      .then(r => r.json())
-      .then(data => setMode(data.mode))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
   function handleToggle(newMode) {
     if (newMode === 'live') {
-      setShowConfirm(true);
-      return;
+      (true);
+      return;setShowConfirm
     }
     switchMode('paper');
   }
@@ -27,20 +19,10 @@ function TradingModeToggle() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/settings/trading-mode', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: newMode }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to update');
-        return;
-      }
-      setMode(newMode);
+      await updateTradingMode(newMode);
       setShowConfirm(false);
-    } catch {
-      setError('Failed to update trading mode');
+    } catch (err) {
+      setError(err.message || 'Failed to update trading mode');
     } finally {
       setSaving(false);
     }

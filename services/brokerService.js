@@ -17,13 +17,16 @@ import { getUserProfile } from "./userProfileDb.js";
 
 // --- Per-user Alpaca adapter factory --------------------------------
 
-async function createUserAlpacaAdapter(userId, tenantId) {
-  let tradingMode = 'paper';
-  try {
-    const profile = await getUserProfile(userId, tenantId);
-    tradingMode = profile?.tradingMode || 'paper';
-  } catch {
-    // safe default
+async function createUserAlpacaAdapter(userId, tenantId, mode = null) {
+  let tradingMode = mode;
+  if (!tradingMode) {
+    tradingMode = 'paper';
+    try {
+      const profile = await getUserProfile(userId, tenantId);
+      tradingMode = profile?.tradingMode || 'paper';
+    } catch {
+      // safe default
+    }
   }
 
   if (tradingMode === 'live') {
@@ -39,18 +42,18 @@ async function createUserAlpacaAdapter(userId, tenantId) {
 
 // --- Alpaca ----------------------------------------------------------
 
-export async function getAlpacaAccount(userId, tenantId) {
-  const adapter = await createUserAlpacaAdapter(userId, tenantId);
+export async function getAlpacaAccount(userId, tenantId, mode = null) {
+  const adapter = await createUserAlpacaAdapter(userId, tenantId, mode);
   return adapter.getAccountSummary(userId, tenantId);
 }
 
-export async function getAlpacaPositions(userId, tenantId) {
-  const adapter = await createUserAlpacaAdapter(userId, tenantId);
+export async function getAlpacaPositions(userId, tenantId, mode = null) {
+  const adapter = await createUserAlpacaAdapter(userId, tenantId, mode);
   return adapter.getPositions(userId, tenantId);
 }
 
-export async function getAlpacaOrders(userId, tenantId) {
-  const adapter = await createUserAlpacaAdapter(userId, tenantId);
+export async function getAlpacaOrders(userId, tenantId, mode = null) {
+  const adapter = await createUserAlpacaAdapter(userId, tenantId, mode);
   return adapter.getOrders(userId, tenantId);
 }
 

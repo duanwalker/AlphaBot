@@ -1,6 +1,7 @@
 // src/components/Settings.js
 import React, { useState, useEffect } from "react";
-import { health } from "../services/api";
+import { health, getTradingMode } from "../services/api";
+import { useTradingMode } from "../context/TradingModeContext";
 
 const DEFAULT_SETTINGS = {
   maxPositionSize: 5000,
@@ -24,9 +25,13 @@ export default function Settings() {
   });
   const [apiStatus, setApiStatus] = useState(null);
   const [saved, setSaved] = useState(false);
+  const { updateTradingMode } = useTradingMode();
 
   useEffect(() => {
     checkHealth();
+    getTradingMode()
+      .then(({ mode }) => set("paperMode", mode === "paper"))
+      .catch(() => { /* keep localStorage value */ });
   }, []);
 
   async function checkHealth() {
@@ -91,7 +96,10 @@ export default function Settings() {
             <Toggle on={settings.requireApproval} onChange={v => set("requireApproval", v)} />
           </SettingRow>
           <SettingRow label="Paper trading mode">
-            <Toggle on={settings.paperMode} onChange={v => set("paperMode", v)} />
+            <Toggle on={settings.paperMode} onChange={v => {
+              set("paperMode", v);
+              updateTradingMode(v ? "paper" : "live");
+            }} />
           </SettingRow>
         </div>
 

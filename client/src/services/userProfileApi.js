@@ -46,3 +46,15 @@ export async function deleteUserProfile() {
   if (!res.ok) throw new Error('Delete failed');
   return res.json();
 }
+
+export async function getTradingMode() {
+  return requestJson('/api/settings/trading-mode');
+}
+
+export async function persistTradingMode(mode) {
+  return requestJson('/api/settings/trading-mode', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+}

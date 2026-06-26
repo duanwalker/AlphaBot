@@ -5,6 +5,7 @@ import Signals from "./components/Signals";
 import Research from "./components/Research";
 import Trades from "./components/Trades";
 import Settings from "./components/Settings";
+import { TradingModeProvider, useTradingMode } from "./context/TradingModeContext";
 import "./App.css";
 
 const TABS = [
@@ -15,9 +16,10 @@ const TABS = [
   { id: "settings", label: "Settings" },
 ];
 
-export default function App() {
+function AppInner() {
   const [activeTab, setActiveTab] = useState("portfolio");
   const [trades, setTrades] = useState([]);
+  const { tradingMode } = useTradingMode();
 
   function addTrade(trade) {
     setTrades((prev) => [...prev, trade]);
@@ -32,7 +34,9 @@ export default function App() {
         <div className="topbar-left">
           <span className="logo">AlphaBot</span>
           <span className="status-dot" />
-          <span className="status-label">Semi-automated · Paper trading</span>
+          <span className="status-label">
+            Semi-automated · {tradingMode === "live" ? "Live trading" : "Paper trading"}
+          </span>
         </div>
         <div className="topbar-right">
           <span className="topbar-badge" onClick={() => setActiveTab("settings")}>⚙ Settings</span>
@@ -62,5 +66,13 @@ export default function App() {
         {activeTab === "settings" && <Settings />}
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <TradingModeProvider>
+      <AppInner />
+    </TradingModeProvider>
   );
 }

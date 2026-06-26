@@ -55,3 +55,13 @@ export const market = {
 };
 
 export const health = () => req("/health");
+
+// ─── Trading Mode ─────────────────────────────────────────────────────────────
+
+export const getTradingMode = () => req("/settings/trading-mode");
+
+export const setTradingMode = (mode) =>
+  req("/settings/trading-mode", {
+    method: "PUT",
+    body: JSON.stringify({ mode }),
+  });

@@ -1,6 +1,7 @@
 // src/components/Portfolio.js
 import React, { useState, useEffect } from "react";
 import { alpaca, oanda, aiChat } from "../services/api";
+import { useTradingMode } from "../context/TradingModeContext";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -29,10 +30,11 @@ export default function Portfolio() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [usingDemo, setUsingDemo] = useState(false);
+  const { tradingMode } = useTradingMode();
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [tradingMode]);
 
   async function loadData() {
     setLoading(true);
