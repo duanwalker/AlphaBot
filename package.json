@@ -22,6 +22,7 @@
     "frontend": "react-scripts start",
     "build": "react-scripts build",
     "test:azure": "node scripts/testAzureTables.js",
+    "test:sentiment": "vitest run tests/sentiment",
     "dev": "nodemon -r dotenv/config server.js",
     "start": "node -r dotenv/config server.js"
   },
