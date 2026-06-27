@@ -9,8 +9,8 @@ function TradingModeToggle() {
 
   function handleToggle(newMode) {
     if (newMode === 'live') {
-      (true);
-      return;setShowConfirm
+      setShowConfirm(true);
+      return;
     }
     switchMode('paper');
   }

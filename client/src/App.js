@@ -37,6 +37,7 @@ function AppShell({ initialTab = 'overview' }) {
   const { account, positions, orders, loading, error, refetchOrders } = useAlpaca();
   const [activeTab, setActiveTab]           = useState(location.state?.tab || initialTab);
   const [showAssistant, setShowAssistant]   = useState(false);
+  const [panelWidth, setPanelWidth]         = useState(400);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
   const [activeSymbol, setActiveSymbol]     = useState(null);
   const [externalPrompt, setExternalPrompt] = useState(null);
@@ -150,75 +151,79 @@ function AppShell({ initialTab = 'overview' }) {
         </div>
       </nav>
 
-      <main className="main">
-        {activeTab === 'overview' && (
-          <Dashboard
+      <div className="content-row">
+        <main className={`main${showAssistant ? ' main-with-panel' : ''}`}>
+          {activeTab === 'overview' && (
+            <Dashboard
+              account={account}
+              positions={positions}
+              orders={orders}
+              error={error}
+              loading={loading}
+              marketSnapshot={marketSnapshot}
+              setMarketSnapshot={setMarketSnapshot}
+              setActiveSymbol={setActiveSymbol}
+              activeSymbol={activeSymbol}
+              setActiveTab={setActiveTab}
+            />
+          )}
+
+          {activeTab === 'assistant' && (
+            <AssistantPage
+              account={account}
+              positions={positions}
+              orders={orders}
+              marketSnapshot={marketSnapshot}
+              activeSymbol={activeSymbol}
+              onNavigate={setActiveTab}
+            />
+          )}
+
+          {activeTab === 'research' && (
+            <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} refetchOrders={refetchOrders} />
+          )}
+
+          {activeTab === 'sentiment' && <SentimentPage />}
+
+          {activeTab === 'options' && (
+            <Options
+              initialSymbol={activeSymbol}
+              setActiveSymbol={setActiveSymbol}
+              setShowAssistant={setShowAssistant}
+              setExternalPrompt={setExternalPrompt}
+            />
+          )}
+
+          {activeTab === 'portfolio' && (
+            <Portfolio
+              account={account}
+              positions={positions}
+              orders={orders}
+              loading={loading}
+              error={error}
+              setActiveTab={setActiveTab}
+            />
+          )}
+
+          {/* Settings renders via SettingsLayout's <Outlet> — populated by the Route children below */}
+          {activeTab === 'settings' && <SettingsLayout />}
+        </main>
+
+        {activeTab !== 'assistant' && (
+          <AssistantPanel
+            open={showAssistant}
+            onClose={() => setShowAssistant(false)}
+            panelWidth={panelWidth}
+            setPanelWidth={setPanelWidth}
             account={account}
             positions={positions}
             orders={orders}
-            error={error}
-            loading={loading}
             marketSnapshot={marketSnapshot}
-            setMarketSnapshot={setMarketSnapshot}
-            setActiveSymbol={setActiveSymbol}
-            activeSymbol={activeSymbol}
-            setActiveTab={setActiveTab}
+            symbol={activeSymbol}
+            externalPrompt={externalPrompt}
           />
         )}
-
-        {activeTab === 'assistant' && (
-          <AssistantPage
-            account={account}
-            positions={positions}
-            orders={orders}
-            marketSnapshot={marketSnapshot}
-            activeSymbol={activeSymbol}
-            onNavigate={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'research' && (
-          <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} refetchOrders={refetchOrders} />
-        )}
-
-        {activeTab === 'sentiment' && <SentimentPage />}
-
-        {activeTab === 'options' && (
-          <Options
-            initialSymbol={activeSymbol}
-            setActiveSymbol={setActiveSymbol}
-            setShowAssistant={setShowAssistant}
-            setExternalPrompt={setExternalPrompt}
-          />
-        )}
-
-        {activeTab === 'portfolio' && (
-          <Portfolio
-            account={account}
-            positions={positions}
-            orders={orders}
-            loading={loading}
-            error={error}
-            setActiveTab={setActiveTab}
-          />
-        )}
-
-        {/* Settings renders via SettingsLayout's <Outlet> — populated by the Route children below */}
-        {activeTab === 'settings' && <SettingsLayout />}
-      </main>
-
-      {activeTab !== 'assistant' && (
-        <AssistantPanel
-          open={showAssistant}
-          onClose={() => setShowAssistant(false)}
-          account={account}
-          positions={positions}
-          orders={orders}
-          marketSnapshot={marketSnapshot}
-          symbol={activeSymbol}
-          externalPrompt={externalPrompt}
-        />
-      )}
+      </div>
 
       {!profileLoading && showOnboarding && (
         <OnboardingModal

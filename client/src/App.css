@@ -57,7 +57,8 @@ body::before {
 }
 
 .app-root {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -526,10 +527,23 @@ body::before {
   border-radius: 2px;
 }
 
+/* ====== CONTENT ROW (main + side panel) ====== */
+
+.content-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ====== MAIN CONTENT ====== */
 
 .main {
+  flex: 1;
   padding: 32px 48px;
+  overflow-y: auto;
+  min-width: 0;
 }
 
 .page-header {
@@ -1194,13 +1208,105 @@ body::before {
 
 /* ====== AI ASSISTANT PANEL ====== */
 
-.assistant-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
+/* ── Desktop side panel ── */
+.assistant-side-panel {
   display: flex;
-  justify-content: flex-end;
-  z-index: 1000;
+  flex-direction: column;
+  height: 100%;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255,255,255,0.10);
+  background: rgba(15,23,42,0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position: relative;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* Drag-to-resize handle — left edge */
+.ap-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.ap-resize-handle:hover,
+.ap-resize-handle:active {
+  background: rgba(99,102,241,0.4);
+}
+
+/* Hide mobile sheet handle on desktop */
+.ap-sheet-handle {
+  display: none;
+}
+
+/* ── Mobile bottom sheet ── */
+@media (max-width: 768px) {
+  .content-row {
+    flex-direction: column;
+    position: relative;
+  }
+
+  .main {
+    padding: 16px 20px;
+    padding-bottom: calc(58vh + 16px);
+  }
+
+  /* Hide desktop resize handle on mobile */
+  .ap-resize-handle {
+    display: none;
+  }
+
+  /* Show mobile drag handle */
+  .ap-sheet-handle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 0 6px;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+
+  .ap-sheet-handle-bar {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.25);
+  }
+
+  /* The panel becomes a bottom sheet on mobile */
+  .assistant-side-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    height: 58vh;
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px 16px 0 0;
+    transition: height 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 200;
+  }
+
+  /* Three snap points driven by data-sheet attribute */
+  .assistant-side-panel[data-sheet="collapsed"] {
+    height: 56px;
+    overflow: hidden;
+  }
+
+  .assistant-side-panel[data-sheet="half"] {
+    height: 58vh;
+  }
+
+  .assistant-side-panel[data-sheet="full"] {
+    height: 92vh;
+  }
 }
 
 .assistant-inline {
@@ -1275,7 +1381,12 @@ body::before {
 .msg-assistant {
   background: rgba(15,23,42,0.9);
   border: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 14px;
+  line-height: 1;
 }
+
+.msg-assistant > div > *:first-child { margin-top: 0; }
+.msg-assistant > div > *:last-child  { margin-bottom: 0; }
 
 .assistant-input-row {
   display: flex;

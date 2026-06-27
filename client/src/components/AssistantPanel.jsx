@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import MarkdownMessage from "./MarkdownMessage";
 
-// Static suggested prompts shown after each assistant response
 function getSuggestions(symbol) {
   if (symbol) {
     return [
@@ -20,19 +20,32 @@ export default function AssistantPanel({
   open,
   onClose,
   inline = false,
+  panelWidth,
+  setPanelWidth,
   account,
   positions,
   orders,
   marketSnapshot,
   symbol,
-  externalPrompt,   // { text, id } — fires sendMessage when id changes
+  externalPrompt,
 }) {
   const [messages, setMessages] = useState([
     { from: "assistant", text: "Hi Duan — what would you like to explore?" },
   ]);
-  const [input, setInput]   = useState("");
+  const [input, setInput]     = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
+
+  // Desktop resize
+  const isResizing      = useRef(false);
+  const cleanupResize   = useRef(() => {});
+
+  // Mobile bottom sheet
+  const [sheetSnap, setSheetSnap] = useState('half');
+  const dragStartY = useRef(null);
+
+  // Cleanup any active resize listeners on unmount
+  useEffect(() => () => cleanupResize.current(), []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -49,12 +62,52 @@ export default function AssistantPanel({
 
   if (!inline && !open) return null;
 
+  // ── Desktop drag-to-resize ──────────────────────────────────
+  function onDragStart() {
+    if (!setPanelWidth) return;
+    isResizing.current = true;
+
+    function move(e) {
+      if (!isResizing.current) return;
+      const newWidth = window.innerWidth - e.clientX;
+      setPanelWidth(Math.min(640, Math.max(280, newWidth)));
+    }
+
+    function up() {
+      isResizing.current = false;
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      cleanupResize.current = () => {};
+    }
+
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    cleanupResize.current = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    };
+  }
+
+  // ── Mobile bottom sheet snap ────────────────────────────────
+  function onTouchStart(e) {
+    dragStartY.current = e.touches[0].clientY;
+  }
+
+  function onTouchEnd(e) {
+    const deltaY = e.changedTouches[0].clientY - dragStartY.current;
+    if (deltaY < -60) {
+      setSheetSnap(prev => prev === 'collapsed' ? 'half' : 'full');
+    } else if (deltaY > 60) {
+      setSheetSnap(prev => prev === 'full' ? 'half' : 'collapsed');
+    }
+  }
+
+  // ── Message sending ─────────────────────────────────────────
   async function sendMessage(text) {
     const msg = typeof text === "string" ? text.trim() : input.trim();
     if (!msg) return;
 
-    const userMsg = { from: "user", text: msg };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, { from: "user", text: msg }]);
     setInput("");
     setLoading(true);
 
@@ -126,80 +179,109 @@ export default function AssistantPanel({
     setInput("");
   }
 
-  const suggestions  = getSuggestions(symbol);
-  const modeBadge    = symbol
+  const suggestions = getSuggestions(symbol);
+  const modeBadge   = symbol
     ? { text: `Symbol mode: ${symbol}`, cls: "ap-badge--symbol" }
     : { text: "Market mode",            cls: "ap-badge--market" };
 
-  const containerClass = inline ? "assistant-inline" : "assistant-overlay";
-  const panelClass     = inline ? "assistant-panel assistant-panel-inline" : "assistant-panel";
-
-  return (
-    <div className={containerClass}>
-      <div className={panelClass}>
-        {/* Header */}
-        <div className="assistant-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span>AI Assistant</span>
-            <span className={`ap-badge ${modeBadge.cls}`}>{modeBadge.text}</span>
-          </div>
-          {!inline && (
-            <button className="assistant-close" onClick={onClose}>×</button>
-          )}
+  // ── Shared inner content ────────────────────────────────────
+  const content = (
+    <>
+      <div className="assistant-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>AI Assistant</span>
+          <span className={`ap-badge ${modeBadge.cls}`}>{modeBadge.text}</span>
         </div>
+        {!inline && (
+          <button className="assistant-close" onClick={onClose}>×</button>
+        )}
+      </div>
 
-        {/* Messages */}
-        <div className="assistant-messages">
-          {messages.map((m, i) => {
-            const isLastAssistant =
-              m.from === "assistant" &&
-              i === messages.length - 1 &&
-              !loading &&
-              m.text.length > 10;  // skip the greeting prompt row
+      <div className="assistant-messages">
+        {messages.map((m, i) => {
+          const isLastAssistant =
+            m.from === "assistant" &&
+            i === messages.length - 1 &&
+            !loading &&
+            m.text.length > 10;
 
-            return (
-              <div key={i}>
-                <div className={m.from === "user" ? "msg msg-user" : "msg msg-assistant"}>
-                  {m.text}
-                </div>
-
-                {/* Suggested prompts after last assistant response */}
-                {isLastAssistant && (
-                  <div className="ap-suggestions">
-                    {suggestions.map((s, si) => (
-                      <button
-                        key={si}
-                        className="ap-suggestion-btn"
-                        onClick={() => sendMessage(s.prompt)}
-                      >
-                        {s.label} ↗
-                      </button>
-                    ))}
-                  </div>
-                )}
+          return (
+            <div key={i}>
+              <div className={m.from === "user" ? "msg msg-user" : "msg msg-assistant"}>
+                {m.from === "assistant"
+                  ? <MarkdownMessage text={m.text} />
+                  : m.text
+                }
               </div>
-            );
-          })}
-          <div ref={bottomRef} />
-        </div>
 
-        {/* Input row */}
-        <div className="assistant-input-row">
-          <textarea
-            className="assistant-input"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your positions, risk, strategies, or the market…"
-          />
-          <button className="btn send-btn" onClick={() => sendMessage()} disabled={loading}>
-            {loading ? "Thinking…" : "Send"}
-          </button>
-          <button className="btn reset-btn" onClick={handleReset}>
-            Reset
-          </button>
+              {isLastAssistant && (
+                <div className="ap-suggestions">
+                  {suggestions.map((s, si) => (
+                    <button
+                      key={si}
+                      className="ap-suggestion-btn"
+                      onClick={() => sendMessage(s.prompt)}
+                    >
+                      {s.label} ↗
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="assistant-input-row">
+        <textarea
+          className="assistant-input"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask about your positions, risk, strategies, or the market…"
+        />
+        <button className="btn send-btn" onClick={() => sendMessage()} disabled={loading}>
+          {loading ? "Thinking…" : "Send"}
+        </button>
+        <button className="btn reset-btn" onClick={handleReset}>
+          Reset
+        </button>
+      </div>
+    </>
+  );
+
+  // ── Inline layout (AssistantPage tab) ──────────────────────
+  if (inline) {
+    return (
+      <div className="assistant-inline">
+        <div className="assistant-panel assistant-panel-inline">
+          {content}
         </div>
       </div>
+    );
+  }
+
+  // ── Side panel / mobile bottom sheet ───────────────────────
+  return (
+    <div
+      className="assistant-side-panel"
+      style={{ width: panelWidth }}
+      data-sheet={sheetSnap}
+    >
+      {/* Desktop: drag handle on the left edge */}
+      <div className="ap-resize-handle" onMouseDown={onDragStart} />
+
+      {/* Mobile: drag handle bar at top of sheet */}
+      <div
+        className="ap-sheet-handle"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <div className="ap-sheet-handle-bar" />
+      </div>
+
+      {content}
     </div>
   );
 }

@@ -837,15 +837,30 @@ Use ONLY what is provided. Do not fabricate fields.
 If a field is null or missing, acknowledge it and
 reason from available data.
 
-OUTPUT FORMAT:
-A) Snapshot — current state in 2-3 sentences
-B) Strategy recommendation — most applicable strategy
-   for this symbol given user's profile, with specific
-   strike/expiry/sizing if applicable
-C) Sentiment assessment — how reliable is the signal
-   for THIS symbol and what it suggests
-D) Risk factors — what could go wrong
-E) Action items — specific next steps (optional)`;
+RESPONSE FORMAT:
+Format your responses using markdown. Use **bold** for key figures, metrics, and ticker symbols.
+Use tables when comparing multiple stocks, strategies, or metrics side by side.
+Use bullet lists for enumerated insights, risks, or action items.
+Use ### headers to separate distinct sections in longer responses.
+Use > blockquotes for important risk warnings or summary callouts.
+Keep responses concise and scannable — this is a trading dashboard, not a report.
+Avoid unnecessary filler sentences.
+
+OUTPUT STRUCTURE:
+### Snapshot
+Current state in 2-3 sentences.
+
+### Strategy
+Most applicable strategy given user's profile, with specific strike/expiry/sizing if applicable.
+
+### Sentiment
+How reliable is the signal for this symbol and what it suggests.
+
+### Risks
+- What could go wrong
+
+### Next Steps
+Specific action items (if applicable)`;
 }
 
 export function getMarketPrompt(userProfile = null) {
@@ -870,9 +885,23 @@ Tasks:
 
 Be concise — market overviews should be scannable, not exhaustive.
 
-Output format:
-A) Market tone — 1-2 sentences
-B) Sector breakdown — what's strong / weak
-C) Watchlist relevance — how market conditions affect tracked symbols
-D) Positioning thoughts — any adjustments worth considering, matched to user's active strategies`;
+Format your responses using markdown. Use **bold** for key figures, metrics, and ticker symbols.
+Use tables when comparing multiple sectors or symbols side by side.
+Use bullet lists for enumerated insights, risks, or action items.
+Use ### headers to separate distinct sections.
+Use > blockquotes for important risk warnings or summary callouts.
+Avoid unnecessary filler sentences.
+
+Output structure:
+### Market Tone
+1-2 sentences on overall risk-on vs risk-off.
+
+### Sector Breakdown
+What's strong / weak — use a table if comparing multiple sectors.
+
+### Watchlist
+How market conditions affect tracked symbols.
+
+### Positioning
+Any adjustments worth considering, matched to user's active strategies.`;
 }
