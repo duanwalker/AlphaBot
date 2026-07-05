@@ -4,6 +4,7 @@ import PortfolioChartHero from "../components/PortfolioChartHero";
 import PLCard from "../components/PLCard";
 import OverviewSidebar from "../components/OverviewSidebar";
 import SentimentDashboardCard from "../components/sentiment/SentimentDashboardCard";
+import { useSymbol } from "../context/SymbolContext";
 
 export default function Dashboard({
   account,
@@ -13,10 +14,9 @@ export default function Dashboard({
   loading,
   marketSnapshot,
   setMarketSnapshot,
-  setActiveSymbol,
-  activeSymbol,
   setActiveTab,
 }) {
+  const { symbol: activeSymbol } = useSymbol();
   return (
     <>
       {error && <div className="alert error">{error}</div>}

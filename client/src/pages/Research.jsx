@@ -5,8 +5,7 @@ import ResearchSentimentPanel from '../components/sentiment/ResearchSentimentPan
 import RelevantArticlesPanel from '../components/news/RelevantArticlesPanel';
 import ResearchTradeWidget from '../components/ResearchTradeWidget';
 import SentimentBadge from '../components/sentiment/SentimentBadge';
-
-const DEFAULT_SYMBOL = 'AAPL';
+import { useSymbol } from '../context/SymbolContext';
 
 function formatLargeNumber(value) {
   const n = Number(value);
@@ -152,22 +151,16 @@ function SymbolHeader({ symbol, searchResult }) {
   );
 }
 
-export default function Research({ onNavigate, setActiveSymbol: setAppSymbol, refetchOrders }) {
+export default function Research({ onNavigate, refetchOrders }) {
+  const { symbol: activeSymbol, setSymbol: setAppSymbol } = useSymbol();
   const [inputValue, setInputValue]   = useState('');
-  const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const { loading: searching, error: searchError, result, searchSymbol } = useSymbolSearch();
-
-  // Sync local symbol up to AppShell so AssistantPanel overlay gets it
-  useEffect(() => {
-    setAppSymbol?.(activeSymbol);
-  }, [activeSymbol, setAppSymbol]);
 
   function handleSearch(e) {
     e.preventDefault();
     const sym = inputValue.trim().toUpperCase();
     if (!sym) return;
-    console.log('[DEBUG] setSymbol called with:', sym);
-    setActiveSymbol(sym);
+    setAppSymbol(sym);
     searchSymbol(sym);
   }
 
@@ -201,28 +194,40 @@ export default function Research({ onNavigate, setActiveSymbol: setAppSymbol, re
           <p className="res-search-error">{searchError}</p>
         )}
 
-        {/* Symbol header */}
-        <SymbolHeader symbol={activeSymbol} searchResult={result} />
+        {!activeSymbol ? (
+          <div className="res-empty-state">Enter a symbol above to see research for it.</div>
+        ) : (
+          <>
+            {/* Symbol header */}
+            <SymbolHeader symbol={activeSymbol} searchResult={result} />
 
-        {/* Price chart */}
-        <HistoricalSparklineCard symbol={activeSymbol} />
+            {/* Price chart */}
+            <HistoricalSparklineCard symbol={activeSymbol} />
 
-        {/* Fundamentals */}
-        <FundamentalsGrid symbol={activeSymbol} />
+            {/* Fundamentals */}
+            <FundamentalsGrid symbol={activeSymbol} />
 
-        {/* News */}
-        <RelevantArticlesPanel symbol={activeSymbol} />
+            {/* News */}
+            <RelevantArticlesPanel symbol={activeSymbol} />
+          </>
+        )}
       </div>
 
       {/* ── Right column ── */}
       <div className="res-right">
-        <ResearchSentimentPanel symbol={activeSymbol} />
-        <ResearchTradeWidget
-          symbol={activeSymbol}
-          onNavigateOptions={onNavigate}
-          onSetSymbol={setAppSymbol}
-          refetchOrders={refetchOrders}
-        />
+        {activeSymbol ? (
+          <>
+            <ResearchSentimentPanel symbol={activeSymbol} />
+            <ResearchTradeWidget
+              symbol={activeSymbol}
+              onNavigateOptions={onNavigate}
+              onSetSymbol={setAppSymbol}
+              refetchOrders={refetchOrders}
+            />
+          </>
+        ) : (
+          <div className="res-empty-state">Enter a symbol above to see research for it.</div>
+        )}
       </div>
     </div>
   );

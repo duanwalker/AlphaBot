@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PLCard from '../components/PLCard';
+import { useSymbol } from '../context/SymbolContext';
 
 const OCC_REGEX = /^([A-Z]{1,6})(\d{6})([CP])(\d{8})$/;
 
@@ -87,6 +88,7 @@ function getStatusDisplay(status) {
 }
 
 export default function Portfolio({ account, positions, orders, loading, error, setActiveTab }) {
+  const { symbol: activeSymbol } = useSymbol();
   const [orderFilter, setOrderFilter] = useState('all');
 
   const stockPos = (positions ?? []).filter(p => !isOption(p));
@@ -173,8 +175,9 @@ export default function Portfolio({ account, positions, orders, loading, error, 
                   {stockPos.map(p => {
                     const pl   = p.unrealized_pl   != null ? Number(p.unrealized_pl)   : null;
                     const plpc = p.unrealized_plpc != null ? Number(p.unrealized_plpc) : null;
+                    const isActive = activeSymbol && p.symbol === activeSymbol;
                     return (
-                      <tr key={p.asset_id ?? p.symbol}>
+                      <tr key={p.asset_id ?? p.symbol} className={isActive ? 'pf-row--active' : ''}>
                         <td className="pf-symbol">{p.symbol}</td>
                         <td className="pf-details">
                           {p.qty} sh
@@ -220,8 +223,9 @@ export default function Portfolio({ account, positions, orders, loading, error, 
                     const parsed = parseOptions(p.symbol);
                     const pl     = p.unrealized_pl   != null ? Number(p.unrealized_pl)   : null;
                     const plpc   = p.unrealized_plpc != null ? Number(p.unrealized_plpc) : null;
+                    const isActive = activeSymbol && parsed?.underlying === activeSymbol;
                     return (
-                      <tr key={p.asset_id ?? p.symbol}>
+                      <tr key={p.asset_id ?? p.symbol} className={isActive ? 'pf-row--active' : ''}>
                         <td>
                           <div className="pf-contract-row">
                             {parsed ? (

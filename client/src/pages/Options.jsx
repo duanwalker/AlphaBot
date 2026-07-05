@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import WheelTracker from '../components/WheelTracker';
+import { useSymbol } from '../context/SymbolContext';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -386,10 +387,10 @@ function OrderTicket({
 
 // ── Main Page ─────────────────────────────────────────────────
 
-export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, setShowAssistant, setExternalPrompt }) {
+export default function Options({ setShowAssistant, setExternalPrompt }) {
+  const { symbol, setSymbol }               = useSymbol();
   const [optionsView, setOptionsView]       = useState('chain');
-  const [inputValue, setInputValue]         = useState(initialSymbol || 'AAPL');
-  const [symbol, setSymbol]                 = useState(initialSymbol || 'AAPL');
+  const [inputValue, setInputValue]         = useState(symbol || '');
   const [chainView, setChainView]           = useState('calls');
   const [expirations, setExpirations]       = useState([]);
   const [selectedExpiration, setSelectedExpiration] = useState('');
@@ -402,9 +403,6 @@ export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, 
   const [loadingChain, setLoadingChain]     = useState(false);
   const [error, setError]                   = useState(null);
   const [optionsUnavailable, setOptionsUnavailable] = useState(false);
-
-  // Sync symbol to AppShell → AssistantPanel gets the right context
-  useEffect(() => { setAppSymbol?.(symbol); }, [symbol, setAppSymbol]);
 
   // Fetch available expirations when symbol changes
   useEffect(() => {
@@ -561,7 +559,7 @@ export default function Options({ initialSymbol, setActiveSymbol: setAppSymbol, 
             </div>
           ) : rows.length === 0 ? (
             <div className="opt-empty">
-              {symbol ? `No options data for ${symbol}. Try a different expiration.` : 'Enter a symbol to load the chain.'}
+              {symbol ? `No options data for ${symbol}. Try a different expiration.` : 'Enter a symbol above to see options for it.'}
             </div>
           ) : (
             <div className="opt-table-scroll">

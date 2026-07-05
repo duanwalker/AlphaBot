@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import MarkdownMessage from "./MarkdownMessage";
+import { useSymbol } from "../context/SymbolContext";
 
 function getSuggestions(symbol) {
   if (symbol) {
@@ -26,9 +27,9 @@ export default function AssistantPanel({
   positions,
   orders,
   marketSnapshot,
-  symbol,
   externalPrompt,
 }) {
+  const { symbol } = useSymbol();
   const [messages, setMessages] = useState([
     { from: "assistant", text: "Hi Duan — what would you like to explore?" },
   ]);

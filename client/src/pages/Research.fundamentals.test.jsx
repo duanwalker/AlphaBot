@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Research from './Research';
+import { SymbolProvider } from '../context/SymbolContext';
 
 jest.mock('../hooks/useSymbolSearch', () => ({
   __esModule: true,
@@ -42,6 +43,21 @@ jest.mock('../components/sentiment/SentimentBadge', () => ({
   __esModule: true,
   default: () => <span data-testid="mock-badge">sentiment</span>,
 }));
+
+function renderResearch() {
+  return render(
+    <SymbolProvider>
+      <Research />
+    </SymbolProvider>
+  );
+}
+
+async function searchFor(symbol) {
+  const searchInput = screen.getByPlaceholderText(/search symbol/i);
+  userEvent.clear(searchInput);
+  userEvent.type(searchInput, symbol);
+  userEvent.click(screen.getByRole('button', { name: 'Search' }));
+}
 
 function jsonResponse(body, ok = true, status = 200) {
   return Promise.resolve({
@@ -101,13 +117,21 @@ describe('Research fundamentals flow', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  test('triggers fundamentals fetch on mount with relative URL', async () => {
+  test('shows an empty-state prompt and does not fetch until a symbol is entered', () => {
+    renderResearch();
+
+    expect(screen.getAllByText(/enter a symbol above/i).length).toBeGreaterThan(0);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test('triggers fundamentals fetch once a symbol is searched', async () => {
     fetch.mockImplementation((url) => {
       if (url === '/api/fundamentals/AAPL') return jsonResponse(aaplPayload);
       return jsonResponse({}, false, 404);
     });
 
-    render(<Research />);
+    renderResearch();
+    await searchFor('AAPL');
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/fundamentals/AAPL');
@@ -122,7 +146,8 @@ describe('Research fundamentals flow', () => {
     });
     fetch.mockImplementation(() => pending);
 
-    const { container } = render(<Research />);
+    const { container } = renderResearch();
+    await searchFor('AAPL');
     expect(container.querySelector('.res-fund-skeleton')).toBeInTheDocument();
 
     resolveFetch({ ok: true, status: 200, json: async () => aaplPayload });
@@ -135,7 +160,8 @@ describe('Research fundamentals flow', () => {
       return jsonResponse({}, false, 404);
     });
 
-    render(<Research />);
+    renderResearch();
+    await searchFor('AAPL');
 
     expect(await screen.findByText('28.40')).toBeInTheDocument();
     expect(screen.getByText('$7.10')).toBeInTheDocument();
@@ -146,7 +172,7 @@ describe('Research fundamentals flow', () => {
     expect(screen.queryByText('$123')).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(console.log).toHaveBeenCalledWith('[FUNDAMENTALS] received:', expect.objectContaining({
+      expect(console.log).toHaveBeenCalledWith('[DEBUG] Raw response for', 'AAPL', ':', expect.objectContaining({
         symbol: 'AAPL',
         peRatio: '28.4',
         eps: '7.1',
@@ -159,14 +185,12 @@ describe('Research fundamentals flow', () => {
       .mockImplementationOnce(() => jsonResponse(aaplPayload))
       .mockImplementationOnce(() => jsonResponse(msftPayload));
 
-    render(<Research />);
+    renderResearch();
+    await searchFor('AAPL');
 
     expect(await screen.findByText('$7.10')).toBeInTheDocument();
 
-    const searchInput = screen.getByPlaceholderText(/search symbol/i);
-    userEvent.clear(searchInput);
-    userEvent.type(searchInput, 'MSFT');
-    userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await searchFor('MSFT');
 
     await waitFor(() => {
       expect(fetch).toHaveBeenNthCalledWith(2, '/api/fundamentals/MSFT');
@@ -180,7 +204,8 @@ describe('Research fundamentals flow', () => {
   test('surfaces fundamentals fetch errors to UI', async () => {
     fetch.mockImplementation(() => Promise.reject(new Error('Network down')));
 
-    render(<Research />);
+    renderResearch();
+    await searchFor('AAPL');
 
     expect(await screen.findByText('Network down')).toBeInTheDocument();
     expect(console.error).toHaveBeenCalled();

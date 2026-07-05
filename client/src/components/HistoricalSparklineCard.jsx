@@ -45,7 +45,7 @@ function SparklineTooltip({ payload }) {
   );
 }
 
-export default function HistoricalSparklineCard({ symbol = "AAPL" }) {
+export default function HistoricalSparklineCard({ symbol }) {
   const {
     candles,
     loading,

@@ -230,7 +230,7 @@ export default function ResearchSentimentPanel({ symbol }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Symbol</div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>{normalizedSymbol || "AAPL"}</div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{normalizedSymbol || "—"}</div>
         </div>
 
         <div style={{ textAlign: "right" }}>

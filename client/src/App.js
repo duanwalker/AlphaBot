@@ -19,6 +19,7 @@ import Dashboard from "./pages/Dashboard";
 import Options from "./pages/Options";
 import Portfolio from "./pages/Portfolio";
 import SentimentPage from "./pages/SentimentPage";
+import { SymbolProvider } from "./context/SymbolContext";
 
 const TABS = ['overview', 'assistant', 'research', 'sentiment', 'options', 'portfolio'];
 
@@ -39,7 +40,6 @@ function AppShell({ initialTab = 'overview' }) {
   const [showAssistant, setShowAssistant]   = useState(false);
   const [panelWidth, setPanelWidth]         = useState(400);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
-  const [activeSymbol, setActiveSymbol]     = useState(null);
   const [externalPrompt, setExternalPrompt] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -95,7 +95,6 @@ function AppShell({ initialTab = 'overview' }) {
       return;
     }
     setActiveTab(tab);
-    setActiveSymbol(null);
     if (tab === 'assistant') setShowAssistant(false);
     if (tab === 'portfolio') refetchOrders();
     // When leaving /settings, navigate back to root and pass the desired tab
@@ -162,8 +161,6 @@ function AppShell({ initialTab = 'overview' }) {
               loading={loading}
               marketSnapshot={marketSnapshot}
               setMarketSnapshot={setMarketSnapshot}
-              setActiveSymbol={setActiveSymbol}
-              activeSymbol={activeSymbol}
               setActiveTab={setActiveTab}
             />
           )}
@@ -174,21 +171,18 @@ function AppShell({ initialTab = 'overview' }) {
               positions={positions}
               orders={orders}
               marketSnapshot={marketSnapshot}
-              activeSymbol={activeSymbol}
               onNavigate={setActiveTab}
             />
           )}
 
           {activeTab === 'research' && (
-            <Research onNavigate={setActiveTab} setActiveSymbol={setActiveSymbol} refetchOrders={refetchOrders} />
+            <Research onNavigate={setActiveTab} refetchOrders={refetchOrders} />
           )}
 
           {activeTab === 'sentiment' && <SentimentPage />}
 
           {activeTab === 'options' && (
             <Options
-              initialSymbol={activeSymbol}
-              setActiveSymbol={setActiveSymbol}
               setShowAssistant={setShowAssistant}
               setExternalPrompt={setExternalPrompt}
             />
@@ -219,7 +213,6 @@ function AppShell({ initialTab = 'overview' }) {
             positions={positions}
             orders={orders}
             marketSnapshot={marketSnapshot}
-            symbol={activeSymbol}
             externalPrompt={externalPrompt}
           />
         )}
@@ -237,23 +230,25 @@ function AppShell({ initialTab = 'overview' }) {
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<AppShell initialTab="overview" />} />
-        <Route path="/research" element={<AppShell initialTab="research" />} />
-        <Route path="/orders" element={<AppShell initialTab="portfolio" />} />
-        <Route path="/positions" element={<AppShell initialTab="portfolio" />} />
-        <Route path="/settings" element={<AppShell initialTab="settings" />}>
-          <Route index          element={<Profile />} />
-          <Route path="profile"     element={<Profile />} />
-          <Route path="billing"     element={<BillingUsage />} />
-          <Route path="api-keys"    element={<ApiKeys />} />
-          <Route path="preferences"     element={<Preferences />} />
-          <Route path="trading-account" element={<TradingAccount />} />
-          <Route path="about"           element={<About />} />
-        </Route>
-        <Route path="*" element={<AppShell />} />
-      </Routes>
-    </Router>
+    <SymbolProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<AppShell initialTab="overview" />} />
+          <Route path="/research" element={<AppShell initialTab="research" />} />
+          <Route path="/orders" element={<AppShell initialTab="portfolio" />} />
+          <Route path="/positions" element={<AppShell initialTab="portfolio" />} />
+          <Route path="/settings" element={<AppShell initialTab="settings" />}>
+            <Route index          element={<Profile />} />
+            <Route path="profile"     element={<Profile />} />
+            <Route path="billing"     element={<BillingUsage />} />
+            <Route path="api-keys"    element={<ApiKeys />} />
+            <Route path="preferences"     element={<Preferences />} />
+            <Route path="trading-account" element={<TradingAccount />} />
+            <Route path="about"           element={<About />} />
+          </Route>
+          <Route path="*" element={<AppShell />} />
+        </Routes>
+      </Router>
+    </SymbolProvider>
   );
 }

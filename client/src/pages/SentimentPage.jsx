@@ -5,6 +5,7 @@ import { addToWatchlist, getWatchlist } from "../services/watchlistApi";
 import { getNextScheduledRunEt } from "../utils/sentimentSchedule";
 import useLatestSentiment from "../hooks/useLatestSentiment";
 import useToast from "../hooks/useToast";
+import { useSymbol } from "../context/SymbolContext";
 
 function normalizeTicker(value) {
   return String(value || "").trim().toUpperCase();
@@ -76,6 +77,7 @@ function WatchlistFooter({ selectedSymbol }) {
 
 export default function SentimentPage() {
   const { toast } = useToast();
+  const { symbol: sharedSymbol, setSymbol: setSharedSymbol } = useSymbol();
   const [symbols, setSymbols] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -105,12 +107,20 @@ export default function SentimentPage() {
     let stale = false;
     loadWatchlist().then(nextSymbols => {
       if (!stale && nextSymbols.length) {
-        setSelectedSymbol(prev =>
-          !prev || !nextSymbols.includes(prev) ? nextSymbols[0] : prev
-        );
+        setSelectedSymbol(prev => {
+          if (prev && nextSymbols.includes(prev)) return prev;
+          // Nice-to-have: if the shared active symbol is already in the
+          // watchlist, prefer it over just defaulting to the first row.
+          if (sharedSymbol && nextSymbols.includes(sharedSymbol)) return sharedSymbol;
+          return nextSymbols[0];
+        });
       }
     });
     return () => { stale = true; };
+    // sharedSymbol intentionally excluded — this is a one-time preference at
+    // load time, not a live sync (selecting here should not be forced by
+    // symbol changes made from other tabs).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadWatchlist, refreshKey]);
 
   useEffect(() => {
@@ -134,6 +144,7 @@ export default function SentimentPage() {
       await addToWatchlist(ticker);
       await loadWatchlist();
       setSelectedSymbol(ticker);
+      setSharedSymbol(ticker);
       window.dispatchEvent(new CustomEvent("watchlist:updated"));
       setAddInput("");
       setShowAdd(false);
@@ -143,7 +154,15 @@ export default function SentimentPage() {
     } finally {
       setAdding(false);
     }
-  }, [addInput, adding, loadWatchlist, toast]);
+  }, [addInput, adding, loadWatchlist, setSharedSymbol, toast]);
+
+  // Selecting a watchlist row is one-directional: it updates the shared
+  // active symbol (so Research/Options/Assistant follow it), but the shared
+  // symbol changing elsewhere never forces a change back onto this list.
+  function handleSelectSymbol(sym) {
+    setSelectedSymbol(sym);
+    if (sym) setSharedSymbol(sym);
+  }
 
   return (
     <div style={{
@@ -191,7 +210,7 @@ export default function SentimentPage() {
                 key={symbol}
                 symbol={symbol}
                 selected={symbol === selectedSymbol}
-                onSelect={setSelectedSymbol}
+                onSelect={handleSelectSymbol}
                 selectedColor="#22c55e"
               />
             ))

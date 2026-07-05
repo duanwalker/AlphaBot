@@ -1213,6 +1213,7 @@ body::before {
   display: flex;
   flex-direction: column;
   height: 100%;
+  box-sizing: border-box;
   flex-shrink: 0;
   border-left: 1px solid rgba(255,255,255,0.10);
   background: rgba(15,23,42,0.95);
@@ -1543,6 +1544,13 @@ body::before {
   font-size: 13px;
   color: var(--color-text-danger);
   margin: 0;
+}
+
+.res-empty-state {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 /* Symbol header */
@@ -2544,6 +2552,10 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.pf-row--active {
+  background: var(--color-background-info);
 }
 
 /* Row 1 — five stat cards */

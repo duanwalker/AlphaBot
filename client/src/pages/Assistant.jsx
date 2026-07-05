@@ -49,7 +49,6 @@ export default function AssistantPage({
   positions,
   orders,
   marketSnapshot,
-  activeSymbol,
   onNavigate,
 }) {
   const [externalPrompt, setExternalPrompt] = useState(null);
@@ -94,7 +93,6 @@ export default function AssistantPage({
           positions={positions}
           orders={orders}
           marketSnapshot={marketSnapshot}
-          symbol={activeSymbol}
           externalPrompt={externalPrompt}
         />
       </div>
