@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import WheelTracker from '../components/WheelTracker';
+import OptionsFundamentalsCard from '../components/OptionsFundamentalsCard';
 import { useSymbol } from '../context/SymbolContext';
+import useQuote from '../hooks/useQuote';
+import { fetchJson } from '../utils/fetchJson';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -76,11 +79,54 @@ function processChain(data) {
   return Object.values(strikeMap).sort((a, b) => a.strike - b.strike);
 }
 
+// ── Current price marker ────────────────────────────────────────
+// Finds the index (0..rows.length) at which a marker row should be
+// inserted so it sits between the two strike rows bracketing the live
+// underlying price. Returns null when the price is absent or outside
+// the range of listed strikes (no marker rendered in that case).
+function getMarkerIndex(rows, spotPrice) {
+  if (!rows.length || spotPrice == null) return null;
+  if (spotPrice < rows[0].strike || spotPrice > rows[rows.length - 1].strike) return null;
+
+  let lowerIdx = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].strike <= spotPrice) lowerIdx = i;
+    else break;
+  }
+  return lowerIdx + 1;
+}
+
+// Interleaves a marker placeholder into the row list at markerIndex so
+// callers can render it as a real <tr> alongside the strike rows.
+function withMarker(rows, markerIndex) {
+  const items = [];
+  rows.forEach((row, i) => {
+    if (markerIndex === i) items.push({ marker: true });
+    items.push({ marker: false, row });
+  });
+  if (markerIndex === rows.length) items.push({ marker: true });
+  return items;
+}
+
+function MarkerRow({ spotPrice, colSpan }) {
+  return (
+    <tr className="opt-row-marker">
+      <td colSpan={colSpan} className="opt-row-marker-cell">
+        Current: ${spotPrice.toFixed(2)}
+      </td>
+    </tr>
+  );
+}
+
 // ── Chain Table ───────────────────────────────────────────────
 
-function ChainTable({ rows, chainView, selectedContract, onContractClick }) {
+function ChainTable({ rows, chainView, selectedContract, onContractClick, spotPrice }) {
+  const markerIndex = spotPrice != null ? getMarkerIndex(rows, spotPrice) : null;
+  const renderRows = markerIndex != null ? withMarker(rows, markerIndex) : rows.map(row => ({ marker: false, row }));
+  let table;
+
   if (chainView === 'calls') {
-    return (
+    table = (
       <table className="opt-table">
         <thead>
           <tr>
@@ -90,7 +136,9 @@ function ChainTable({ rows, chainView, selectedContract, onContractClick }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => {
+          {renderRows.map((item, i) => {
+            if (item.marker) return <MarkerRow key={`marker-${i}`} spotPrice={spotPrice} colSpan={13} />;
+            const row = item.row;
             const c = row.call;
             const isSel = selectedContract?.symbol === c?.symbol;
             return (
@@ -118,10 +166,8 @@ function ChainTable({ rows, chainView, selectedContract, onContractClick }) {
         </tbody>
       </table>
     );
-  }
-
-  if (chainView === 'puts') {
-    return (
+  } else if (chainView === 'puts') {
+    table = (
       <table className="opt-table">
         <thead>
           <tr>
@@ -131,7 +177,9 @@ function ChainTable({ rows, chainView, selectedContract, onContractClick }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => {
+          {renderRows.map((item, i) => {
+            if (item.marker) return <MarkerRow key={`marker-${i}`} spotPrice={spotPrice} colSpan={13} />;
+            const row = item.row;
             const p = row.put;
             const isSel = selectedContract?.symbol === p?.symbol;
             return (
@@ -159,48 +207,52 @@ function ChainTable({ rows, chainView, selectedContract, onContractClick }) {
         </tbody>
       </table>
     );
+  } else {
+    // Both view
+    table = (
+      <table className="opt-table opt-table-both">
+        <thead>
+          <tr>
+            <th colSpan={5} className="opt-th-calls">Calls</th>
+            <th className="opt-strike-col">Strike</th>
+            <th colSpan={5} className="opt-th-puts">Puts</th>
+          </tr>
+          <tr>
+            <th>Bid</th><th>Ask</th><th>Δ</th><th>Chg%</th><th>OI</th>
+            <th className="opt-strike-col"></th>
+            <th>Bid</th><th>Ask</th><th>Δ</th><th>Chg%</th><th>OI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {renderRows.map((item, i) => {
+            if (item.marker) return <MarkerRow key={`marker-${i}`} spotPrice={spotPrice} colSpan={11} />;
+            const row = item.row;
+            const c = row.call;
+            const p = row.put;
+            const callSel = selectedContract?.symbol === c?.symbol;
+            const putSel  = selectedContract?.symbol === p?.symbol;
+            return (
+              <tr key={row.strike} className="opt-row opt-row-both">
+                <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt2(c?.bid)}</td>
+                <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt2(c?.ask)}</td>
+                <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt4(c?.delta)}</td>
+                <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmtPct(c?.chgPct)}</td>
+                <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{c?.oi ?? '--'}</td>
+                <td className="opt-strike-col">${row.strike.toFixed(2)}</td>
+                <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt2(p?.bid)}</td>
+                <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt2(p?.ask)}</td>
+                <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt4(p?.delta)}</td>
+                <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmtPct(p?.chgPct)}</td>
+                <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{p?.oi ?? '--'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
   }
 
-  // Both view
-  return (
-    <table className="opt-table opt-table-both">
-      <thead>
-        <tr>
-          <th colSpan={5} className="opt-th-calls">Calls</th>
-          <th className="opt-strike-col">Strike</th>
-          <th colSpan={5} className="opt-th-puts">Puts</th>
-        </tr>
-        <tr>
-          <th>Bid</th><th>Ask</th><th>Δ</th><th>Chg%</th><th>OI</th>
-          <th className="opt-strike-col"></th>
-          <th>Bid</th><th>Ask</th><th>Δ</th><th>Chg%</th><th>OI</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(row => {
-          const c = row.call;
-          const p = row.put;
-          const callSel = selectedContract?.symbol === c?.symbol;
-          const putSel  = selectedContract?.symbol === p?.symbol;
-          return (
-            <tr key={row.strike} className="opt-row opt-row-both">
-              <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt2(c?.bid)}</td>
-              <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt2(c?.ask)}</td>
-              <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmt4(c?.delta)}</td>
-              <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{fmtPct(c?.chgPct)}</td>
-              <td className={`opt-call-cell${callSel ? ' selected' : ''}`} onClick={() => c && onContractClick(c)}>{c?.oi ?? '--'}</td>
-              <td className="opt-strike-col">${row.strike.toFixed(2)}</td>
-              <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt2(p?.bid)}</td>
-              <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt2(p?.ask)}</td>
-              <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmt4(p?.delta)}</td>
-              <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{fmtPct(p?.chgPct)}</td>
-              <td className={`opt-put-cell${putSel ? ' selected' : ''}`} onClick={() => p && onContractClick(p)}>{p?.oi ?? '--'}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
+  return table;
 }
 
 // ── Order Ticket ──────────────────────────────────────────────
@@ -223,7 +275,7 @@ function OrderTicket({
       `Please review this options order before I place it:\n` +
       `${orderSide === 'buy' ? 'Buy to open' : 'Sell to open'} ${orderQty} contract(s) of ` +
       `${symbol} $${selectedContract.strikeVal.toFixed(0)} ${typeLabel} expiring ${selectedContract.expiration} (${dte} DTE)\n` +
-      `Ask: $${fmt2(selectedContract.ask)} | Est. cost: $${estCost.toFixed(2)} | Break-even: $${breakEven?.toFixed(2) ?? '--'}\n` +
+      `Ask: $${fmt2(selectedContract.ask)} | ${orderSide === 'sell' ? 'Est. credit' : 'Est. cost'}: $${estCost.toFixed(2)} | Break-even: $${breakEven?.toFixed(2) ?? '--'}\n` +
       `Greeks — Delta: ${fmt4(selectedContract.delta)}, Theta: ${fmt4(selectedContract.theta)}/day, IV: ${fmtPct(selectedContract.iv)}\n\n` +
       `Should I place this order? What are the key risks?`;
     onSendToAlphaBot(prompt);
@@ -295,7 +347,7 @@ function OrderTicket({
             <span className="opt-stat-value">${midPrice.toFixed(2)}</span>
           </div>
           <div className="opt-stat">
-            <span className="opt-stat-label">Est. cost</span>
+            <span className="opt-stat-label">{orderSide === 'sell' ? 'Est. credit' : 'Est. cost'}</span>
             <span className="opt-stat-value">${estCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div className="opt-stat">
@@ -389,6 +441,7 @@ function OrderTicket({
 
 export default function Options({ setShowAssistant, setExternalPrompt }) {
   const { symbol, setSymbol }               = useSymbol();
+  const { price: spotPrice }                = useQuote(symbol);
   const [optionsView, setOptionsView]       = useState('chain');
   const [inputValue, setInputValue]         = useState(symbol || '');
   const [chainView, setChainView]           = useState('calls');
@@ -406,9 +459,6 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
 
   // Fetch available expirations when symbol changes
   useEffect(() => {
-    if (!symbol) return;
-    let cancelled = false;
-    setLoadingExps(true);
     setError(null);
     setOptionsUnavailable(false);
     setExpirations([]);
@@ -416,8 +466,11 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
     setRows([]);
     setSelectedContract(null);
 
-    fetch(`/api/options/expirations/${symbol}`)
-      .then(r => r.json())
+    if (!symbol) return;
+    let cancelled = false;
+    setLoadingExps(true);
+
+    fetchJson(`/api/options/expirations/${symbol}`)
       .then(data => {
         if (cancelled) return;
         const exps = data.expirations || [];
@@ -441,8 +494,7 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
     setLoadingChain(true);
     setError(null);
 
-    fetch(`/api/options/chain/${symbol}?expiration=${selectedExpiration}`)
-      .then(r => r.json())
+    fetchJson(`/api/options/chain/${symbol}?expiration=${selectedExpiration}`)
       .then(data => {
         if (cancelled) return;
         setRows(processChain(data));
@@ -479,6 +531,25 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
       : selectedContract.strikeVal - midPrice
     : null;
 
+  // ATM IV: average of the call/put IV at the strike closest to spot,
+  // computed from the chain response already loaded for the table —
+  // no separate IV endpoint needed.
+  const atmIV = useMemo(() => {
+    if (!rows.length || spotPrice == null) return null;
+    let closest = null;
+    let minDiff = Infinity;
+    for (const row of rows) {
+      const diff = Math.abs(row.strike - spotPrice);
+      if (diff < minDiff) { minDiff = diff; closest = row; }
+    }
+    if (!closest) return null;
+    const ivs = [closest.call?.iv, closest.put?.iv]
+      .map(v => parseFloat(v))
+      .filter(v => Number.isFinite(v) && v > 0);
+    if (ivs.length === 0) return null;
+    return ivs.reduce((a, b) => a + b, 0) / ivs.length;
+  }, [rows, spotPrice]);
+
   return (
     <div className="opt-page">
       {/* ── Inner tab bar ── */}
@@ -504,6 +575,8 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
       )}
 
       {optionsView === 'chain' && (
+      <>
+      <OptionsFundamentalsCard symbol={symbol} spotPrice={spotPrice} atmIV={atmIV} />
       <div className="opt-layout">
       {/* ── Left: chain panel ── */}
       <div className="opt-left">
@@ -512,7 +585,11 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
             <input
               className="opt-search-input"
               value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                setInputValue(val);
+                if (!val.trim()) setSymbol(null);
+              }}
               placeholder="Symbol… e.g. TSLA"
             />
             <button className="opt-search-btn" type="submit" disabled={loadingExps}>
@@ -568,6 +645,7 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
                 chainView={chainView}
                 selectedContract={selectedContract}
                 onContractClick={handleContractClick}
+                spotPrice={spotPrice}
               />
             </div>
           )}
@@ -589,6 +667,7 @@ export default function Options({ setShowAssistant, setExternalPrompt }) {
         />
       </div>
       </div>
+      </>
       )}
     </div>
   );

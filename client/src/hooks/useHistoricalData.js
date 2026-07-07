@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { fetchJson } from "../utils/fetchJson";
 
 const DEFAULT_TIMEFRAME = "1y";
 
@@ -22,14 +23,9 @@ export default function useHistoricalData(symbol, initialTimeframe = DEFAULT_TIM
         setLoading(true);
         setError("");
 
-        const response = await fetch(
+        const data = await fetchJson(
           `/api/history/${encodeURIComponent(symbol)}?timeframe=${encodeURIComponent(timeframe)}`
         );
-
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data?.error || "Failed to load historical data");
-        }
 
         if (!isCancelled) {
           setCandles(Array.isArray(data?.candles) ? data.candles : []);

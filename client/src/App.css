@@ -2039,6 +2039,102 @@ body::before {
   overflow: auto;
 }
 
+.opt-row-marker {
+  cursor: default;
+  user-select: none;
+}
+
+.opt-row-marker-cell {
+  padding: 4px 8px !important;
+  text-align: center !important;
+  background: var(--color-background-info);
+  color: var(--color-text-info) !important;
+  border-top: 1.5px solid var(--color-border-info) !important;
+  border-bottom: 1.5px solid var(--color-border-info) !important;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Fundamentals card ── */
+
+.opt-fund-card {
+  width: 100%;
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
+
+.opt-fund-card--collapsed {
+  padding-bottom: 14px;
+}
+
+.opt-fund-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.opt-fund-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.opt-fund-toggle {
+  background: none;
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.opt-fund-toggle:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.opt-fund-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-text-danger, #f87171);
+}
+
+.opt-fund-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.opt-fund-cell {
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 8px 10px;
+}
+
+.opt-fund-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.opt-fund-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .opt-loading,
 .opt-empty,
 .opt-error {
